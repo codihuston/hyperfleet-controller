@@ -144,7 +144,24 @@ HyperFleet is a Kubernetes-native control plane for provisioning and lifecycle-m
 5. THE HyperFleet_Operator SHALL support external secret management via ExternalSecrets or similar operators
 6. THE HyperFleet_Operator SHALL validate all custom resource specifications and provide clear validation errors
 
-### Requirement 10: Extensibility and Future Hypervisor Support
+### Requirement 10: Logging and Observability
+
+**User Story:** As a platform operator, I want centralized logging with configurable levels and distributed tracing, so that I can effectively monitor, debug, and troubleshoot the operator across different environments.
+
+#### Acceptance Criteria
+
+1. THE HyperFleet_Operator SHALL implement centralized structured logging using a standard logging library (logrus, zap, or slog)
+2. THE HyperFleet_Operator SHALL support configurable log levels (DEBUG, INFO, WARN, ERROR) via the LOG_LEVEL environment variable
+3. WHEN LOG_LEVEL is not set, THE HyperFleet_Operator SHALL default to INFO level logging
+4. THE HyperFleet_Operator SHALL log all major operations including VM provisioning, deletion, status changes, and error conditions with appropriate context
+5. THE HyperFleet_Operator SHALL implement OpenTelemetry tracing for distributed observability across all major operations
+6. WHEN processing reconciliation loops, THE HyperFleet_Operator SHALL create trace spans for each major operation with relevant attributes
+7. THE HyperFleet_Operator SHALL support configurable OpenTelemetry exporters via environment variables (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_SERVICE_NAME)
+8. THE HyperFleet_Operator SHALL include trace correlation IDs in log messages to connect logs with distributed traces
+9. THE HyperFleet_Operator SHALL emit custom metrics and traces for VM provisioning time, API call latency, and error rates
+10. WHEN errors occur, THE HyperFleet_Operator SHALL log stack traces at DEBUG level and error summaries at ERROR level with trace context
+
+### Requirement 11: Extensibility and Future Hypervisor Support
 
 **User Story:** As a platform architect, I want the operator designed for extensibility, so that I can add support for additional hypervisor platforms like Hyper-V and VMware in the future while maintaining a consistent Kubernetes API.
 
