@@ -1,11 +1,41 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    app.kubernetes.io/name: hyperfleet-operator
-    app.kubernetes.io/managed-by: kustomize
   name: manager-role
 rules:
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - hypervisor.hyperfleet.io
+  resources:
+  - hypervisorclusters
+  - hypervisormachinetemplates
+  - machineclaims
+  - runnerpools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - hypervisor.hyperfleet.io
+  resources:
+  - hypervisorclusters/finalizers
+  - hypervisormachinetemplates/finalizers
+  - machineclaims/finalizers
+  - runnerpools/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - hypervisor.hyperfleet.io
+  resources:
+  - hypervisorclusters/status
+  - hypervisormachinetemplates/status
+  - machineclaims/status
+  - runnerpools/status
+  verbs:
+  - get
+  - patch
+  - update
