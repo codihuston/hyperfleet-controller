@@ -3,9 +3,6 @@
 # It should be run by config/default
 resources:
 - bases/hypervisor.hyperfleet.io_hypervisorclusters.yaml
-- bases/hypervisor.hyperfleet.io_hypervisormachinetemplates.yaml
-- bases/hypervisor.hyperfleet.io_machineclaims.yaml
-- bases/hypervisor.hyperfleet.io_runnerpools.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

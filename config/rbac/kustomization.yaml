@@ -22,15 +22,6 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the hyperfleet-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
-- runnerpool_admin_role.yaml
-- runnerpool_editor_role.yaml
-- runnerpool_viewer_role.yaml
-- machineclaim_admin_role.yaml
-- machineclaim_editor_role.yaml
-- machineclaim_viewer_role.yaml
-- hypervisormachinetemplate_admin_role.yaml
-- hypervisormachinetemplate_editor_role.yaml
-- hypervisormachinetemplate_viewer_role.yaml
 - hypervisorcluster_admin_role.yaml
 - hypervisorcluster_editor_role.yaml
 - hypervisorcluster_viewer_role.yaml
