@@ -10,4 +10,14 @@ plugins:
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: hyperfleet-operator
 repo: github.com/codihuston/hyperfleet-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: hyperfleet.io
+  group: hypervisor
+  kind: HypervisorCluster
+  path: github.com/codihuston/hyperfleet-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"
