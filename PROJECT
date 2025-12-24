@@ -29,4 +29,13 @@ resources:
   kind: HypervisorMachineTemplate
   path: github.com/codihuston/hyperfleet-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: hyperfleet.io
+  group: hypervisor
+  kind: MachineClaim
+  path: github.com/codihuston/hyperfleet-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

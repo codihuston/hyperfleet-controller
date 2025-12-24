@@ -2,4 +2,5 @@
 resources:
 - hypervisor_v1alpha1_hypervisorcluster.yaml
 - hypervisor_v1alpha1_hypervisormachinetemplate.yaml
+- hypervisor_v1alpha1_machineclaim.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
