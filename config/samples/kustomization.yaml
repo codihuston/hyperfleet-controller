@@ -1,4 +1,5 @@
 ## Append samples of your project ##
 resources:
 - hypervisor_v1alpha1_hypervisorcluster.yaml
+- hypervisor_v1alpha1_hypervisormachinetemplate.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
