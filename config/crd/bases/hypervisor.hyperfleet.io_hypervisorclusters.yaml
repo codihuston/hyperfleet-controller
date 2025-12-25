@@ -278,15 +278,15 @@ spec:
                       external DNS
                     type: boolean
                   servers:
-                    description: Servers is a list of DNS servers for VMs
+                    description: |-
+                      Servers is a list of DNS servers for VMs
+                      If empty, VMs will use DHCP-assigned DNS servers
                     items:
                       type: string
-                    minItems: 1
                     type: array
                 required:
                 - domain
                 - registerVMs
-                - servers
                 type: object
               endpoint:
                 description: Endpoint is the API endpoint URL for the hypervisor

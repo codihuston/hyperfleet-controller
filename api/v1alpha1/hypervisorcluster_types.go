@@ -85,8 +85,9 @@ type DNSConfig struct {
 	Domain string `json:"domain"`
 
 	// Servers is a list of DNS servers for VMs
-	// +kubebuilder:validation:MinItems=1
-	Servers []string `json:"servers"`
+	// If empty, VMs will use DHCP-assigned DNS servers
+	// +optional
+	Servers []string `json:"servers,omitempty"`
 
 	// RegisterVMs indicates whether to register VMs in external DNS
 	// +kubebuilder:default=false

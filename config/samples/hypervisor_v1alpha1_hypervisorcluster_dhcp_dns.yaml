@@ -1,0 +1,26 @@
+apiVersion: hypervisor.hyperfleet.io/v1alpha1
+kind: HypervisorCluster
+metadata:
+  name: proxmox-cluster-dhcp-dns
+  namespace: hyperfleet-system
+spec:
+  provider: proxmox
+  endpoint: https://proxmox.example.com:8006
+  credentials:
+    tokenId:
+      name: proxmox-credentials
+      key: tokenId
+    tokenSecret:
+      name: proxmox-credentials
+      key: tokenSecret
+  nodes:
+    - pve-node-1
+  defaultStorage: local-lvm
+  defaultNetwork: vmbr0
+  dns:
+    domain: hyperfleet.local
+    # No servers specified - VMs will use DHCP-assigned DNS servers
+    registerVMs: false
+  tags:
+    environment: production
+    managed-by: hyperfleet

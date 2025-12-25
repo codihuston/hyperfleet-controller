@@ -19,6 +19,7 @@ spec:
   defaultNetwork: ${DEFAULT_NETWORK}
   dns:
     domain: ${DNS_DOMAIN}
+    # DNS servers for VMs - if omitted, VMs will use DHCP-assigned DNS servers
     servers:
       - ${DNS_SERVER_1}
       - ${DNS_SERVER_2}
