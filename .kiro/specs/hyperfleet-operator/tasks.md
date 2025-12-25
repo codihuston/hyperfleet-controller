@@ -117,6 +117,7 @@ This implementation plan converts the HyperFleet operator design into a series o
     - Handle credential rotation and reconnection
     - Implement multi-cluster support
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+    - **TECHNICAL DEBT**: Add CA certificate trust support for Proxmox TLS connections instead of using InsecureSkipVerify. Allow users to provide CA certificates via Kubernetes secrets for proper TLS validation while maintaining backward compatibility.
 
   - [ ]* 6.2 Write property test for cluster controller
     - **Property 2: Multi-Hypervisor Support**
