@@ -28,6 +28,14 @@ This implementation plan converts the HyperFleet operator design into a series o
     - Define template specification structures
     - Implement resource validation (CPU, memory, disk)
     - Add cloud-init configuration support
+    - Add runner-token workload method for GitHub
+    - Implement dynamic GitHub registration token generation
+    - Add configurable HTTP client timeout (default 30s)
+    - Support repository and organization-level runners (repo takes precedence)
+    - Add bootstrap service binary embedding in cloud-init
+    - Support independent SPIFFE attestation configuration
+    - Add configurable OS/arch support for GitHub runner downloads
+    - Make GitHub runner script paths configurable (config.sh, run.sh)
     - _Requirements: 2.1, 2.4_
 
   - [ ]* 2.4 Write property test for template validation
@@ -87,27 +95,28 @@ This implementation plan converts the HyperFleet operator design into a series o
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 5. Implement Generic Attestation and Bootstrap Token Management
-  - [ ] 5.1 Create attestation method interface and implementations
-    - Define AttestationMethod interface for extensibility
+  - [ ] 5.1 Create SPIFFE attestation method interface and implementations
+    - Define SPIFFEMethod interface for extensibility (independent of workload)
     - Implement JoinTokenAttestation as default method
     - Add TPMAttestation implementation
-    - Create attestation method factory and configuration
+    - Create SPIFFE attestation method factory and configuration
     - _Requirements: 6.1, 6.2, 6.6_
 
-  - [ ]* 5.2 Write property test for generic attestation
-    - **Property 14: Generic Attestation and Credential Management**
+  - [ ]* 5.2 Write property test for SPIFFE attestation
+    - **Property 14: SPIFFE Attestation and Identity Management**
     - **Validates: Requirements 6.1, 6.2, 6.3, 6.5, 6.6**
 
-  - [ ] 5.3 Implement SPIRE integration for all attestation methods
+  - [ ] 5.3 Implement SPIRE integration for SPIFFE attestation methods
     - Add SPIRE server client for join token generation
     - Implement TPM-based SPIRE attestation
     - Create unified SPIFFE identity validation
     - _Requirements: 6.1, 6.2, 6.6_
 
-  - [ ] 5.4 Implement bootstrap credential injection
-    - Add cloud-init template rendering with attestation config
+  - [ ] 5.4 Implement workload credential management (independent of SPIFFE)
+    - Add cloud-init template rendering with workload config
     - Implement secure token/certificate generation and storage
     - Add credential expiration and cleanup for all methods
+    - Support both SPIFFE-based and direct token methods
     - _Requirements: 3.2, 6.1_
 
 - [ ] 6. Implement Core Controllers
@@ -183,12 +192,15 @@ This implementation plan converts the HyperFleet operator design into a series o
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 9. Implement VM Bootstrap Service (for VM images)
-  - [ ] 9.1 Create VM bootstrap service binary with generic attestation
-    - Implement attestation method selection and initialization
-    - Add SPIRE agent registration for all attestation methods
-    - Create secrets manager client for credential retrieval
-    - Add GitHub runner registration logic
-    - Add job monitoring and self-termination
+  - [x] 9.1 Create GitHub Actions bootstrap service binary
+    - Implement GitHub Actions runner download and configuration using HTTP client
+    - Add registration token-based runner setup (ephemeral mode)
+    - Implement runner monitoring and auto-termination
+    - Add VM shutdown after job completion
+    - Support configurable runner labels and names
+    - Add configurable OS/arch support with environment variable fallbacks
+    - Make GitHub runner script paths configurable (config.sh, run.sh)
+    - Support independent SPIFFE attestation alongside runner token method
     - _Requirements: 5.1, 5.2, 5.3, 5.5, 6.6_
 
   - [ ]* 9.2 Write property test for GitHub integration

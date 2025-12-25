@@ -182,7 +182,7 @@ status:
 
 #### HypervisorMachineTemplate
 
-Defines reusable VM template specifications.
+Defines reusable VM template specifications with support for multiple attestation methods including dynamic GitHub runner token generation.
 
 ```yaml
 apiVersion: hyperfleet.io/v1alpha1
@@ -202,39 +202,154 @@ spec:
     memory: 8Gi
     disk: 50Gi
   attestation:
-    method: join-token  # Options: join-token, tpm
-    config:
-      joinTokenTTL: 1h
-      # For TPM: tpmDevice: /dev/tpm0
+    # SPIFFE attestation (independent of workload type)
+    spiffe:
+      enabled: true  # Enable SPIFFE attestation
+      method: join-token  # Options: join-token, tpm
+      config:
+        joinTokenTTL: 1h
+        # For TPM method:
+        # tpmDevice: /dev/tpm0
+    
+    # Workload-specific attestation (for GitHub runner tokens)
+    workload:
+      method: runner-token  # Options: runner-token, external-secrets
+      config:
+        # GitHub configuration (for runner-token method)
+        github:
+          # Option 1: GitHub App credentials (recommended for production)
+          app:
+            appId:
+              secretKeyRef:
+                name: github-app-credentials
+                key: app-id
+                namespace: hyperfleet-system
+            privateKey:
+              secretKeyRef:
+                name: github-app-credentials
+                key: private-key
+                namespace: hyperfleet-system
+            installationId:
+              secretKeyRef:
+                name: github-app-credentials
+                key: installation-id
+                namespace: hyperfleet-system
+          
+          # Option 2: PAT credentials (simpler setup, less secure)
+          # credentials:
+          #   secretKeyRef:
+          #     name: github-credentials
+          #     key: pat-token
+          #     namespace: hyperfleet-system
+          
+          # Repository or organization (repo takes precedence)
+          owner: "codihuston"
+          repository: "hyperfleet-controller"  # Optional: if specified, creates repo-level runner
+          # organization: "myorg"              # Optional: if no repo, creates org-level runner
+          
+          # Registration URLs (configurable, with sensible defaults)
+          registrationUrls:
+            repository: "https://api.github.com/repos/{owner}/{repo}/actions/runners/registration-token"
+            organization: "https://api.github.com/orgs/{owner}/actions/runners/registration-token"
+          
+          # Runner configuration URLs (where runner registers to)
+          runnerUrls:
+            repository: "https://github.com/{owner}/{repo}"
+            organization: "https://github.com/{owner}"
+          
+          # GitHub Actions runner configuration
+          runner:
+            # Download URL for GitHub Actions runner (supports OS/arch templating)
+            downloadUrl: "https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-{os}-{arch}-2.311.0.tar.gz"
+            # Installation path on VM
+            installPath: "/opt/actions-runner"
+            # Working directory for jobs
+            workDir: "/tmp/runner-work"
+            # Script names (configurable in case GitHub changes them)
+            configScript: "config.sh"
+            runScript: "run.sh"
+            # Target OS and architecture (defaults to runtime values or env vars)
+            os: "linux"      # Can be overridden by GOOS env var
+            arch: "x64"      # Can be overridden by GOARCH env var (mapped to GitHub naming)
+        
+        # Global HTTP client configuration
+        httpClient:
+          timeoutSeconds: 30  # Configurable timeout, default 30s
+  
   cloudInit:
     userData: |
       #cloud-config
       packages:
         - docker.io
         - git
+        - curl
+        - jq
+      
       write_files:
-        - path: /etc/hyperfleet/attestation.conf
+        - path: /etc/hyperfleet/runner-config.json
           content: |
-            method: {{ .AttestationMethod }}
-            {{ if eq .AttestationMethod "join-token" }}
-            join_token: {{ .JoinToken }}
-            {{ end }}
+            {
+              "method": "{{ .WorkloadMethod }}",
+              "platform": "github-actions",
+              {{ if .SPIFFEEnabled }}
+              "spiffe": {
+                "enabled": true,
+                "join_token": "{{ .JoinToken }}",
+                "spiffe_id": "{{ .SPIFFEID }}"
+              },
+              {{ end }}
+              {{ if eq .WorkloadMethod "runner-token" }}
+              "runner_token": "{{ .RunnerToken }}",
+              "registration_url": "{{ .RegistrationURL }}",
+              "runner_name": "{{ .RunnerName }}",
+              "labels": {{ .Labels | toJson }},
+              "expires_at": "{{ .ExpiresAt }}",
+              "runner": {
+                "download_url": "{{ .RunnerConfig.DownloadUrl }}",
+                "install_path": "{{ .RunnerConfig.InstallPath }}",
+                "work_dir": "{{ .RunnerConfig.WorkDir }}",
+                "config_script": "{{ .RunnerConfig.ConfigScript }}",
+                "run_script": "{{ .RunnerConfig.RunScript }}",
+                "os": "{{ .RunnerConfig.OS }}",
+                "arch": "{{ .RunnerConfig.Arch }}"
+              }
+              {{ end }}
+            }
           permissions: '0600'
-        - path: /etc/hyperfleet/bootstrap.sh
-          content: |
-            #!/bin/bash
-            # Start VM bootstrap service with attestation config
-            /opt/hyperfleet/bootstrap-service --config /etc/hyperfleet/attestation.conf &
+        
+        # Bootstrap service binary (pre-built and embedded in template)
+        - path: /opt/hyperfleet/bootstrap-service
+          content: {{ .BootstrapServiceBinary | base64 }}
           permissions: '0755'
+          encoding: base64
+        
+        - path: /etc/systemd/system/hyperfleet-bootstrap.service
+          content: |
+            [Unit]
+            Description=HyperFleet VM Bootstrap Service
+            After=network-online.target
+            Wants=network-online.target
+            
+            [Service]
+            Type=exec
+            ExecStart=/opt/hyperfleet/bootstrap-service --config /etc/hyperfleet/runner-config.json
+            Restart=no
+            User=root
+            
+            [Install]
+            WantedBy=multi-user.target
+          permissions: '0644'
+      
       runcmd:
-        - systemctl enable docker
-        - systemctl start docker
-        - /etc/hyperfleet/bootstrap.sh
+        - systemctl daemon-reload
+        - systemctl enable hyperfleet-bootstrap.service
+        - systemctl start hyperfleet-bootstrap.service
+  
   metadata:
     labels:
       hyperfleet.io/template: github-runner
     annotations:
-      hyperfleet.io/description: "GitHub Actions runner template with configurable attestation"
+      hyperfleet.io/description: "GitHub Actions runner template with dynamic token generation"
 ```
 
 #### RunnerPool
@@ -879,10 +994,369 @@ func (r *MachineClaimReconciler) generateAttestationData(ctx context.Context,
             SPIFFEID:  spiffeID,
         }, nil
         
+    case "runner-token":
+        // Generate GitHub registration token dynamically
+        return r.generateGitHubRegistrationToken(ctx, claim, template)
+        
     default:
         return nil, fmt.Errorf("unsupported attestation method: %s", template.Spec.Attestation.Method)
     }
 }
+
+// GitHub registration token generation with configurable URLs and timeouts
+// SECURITY: PAT never leaves Kubernetes - only short-lived registration tokens are exposed to VMs
+func (r *MachineClaimReconciler) generateGitHubRegistrationToken(ctx context.Context,
+    claim *hyperfleetv1alpha1.MachineClaim,
+    template *hyperfleetv1alpha1.HypervisorMachineTemplate) (*AttestationData, error) {
+    
+    config := template.Spec.Attestation.Config.GitHub
+    
+    // Get GitHub PAT from secret (PAT stays within Kubernetes cluster)
+    pat, err := r.getSecretValue(ctx, config.Credentials)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get GitHub PAT: %w", err)
+    }
+    
+    // Determine registration URL and runner URL
+    var registrationURL, runnerURL string
+    
+    if config.Repository != "" && config.Organization != "" {
+        // Both specified - prefer repository and log warning
+        r.Log.Info("Both repository and organization specified, preferring repository",
+            "repository", fmt.Sprintf("%s/%s", config.Owner, config.Repository),
+            "organization", config.Organization,
+            "machineClaim", claim.Name)
+    }
+    
+    if config.Repository != "" {
+        // Repository-level runner (preferred)
+        registrationURL = r.expandURL(config.RegistrationUrls.Repository, config.Owner, config.Repository, "")
+        runnerURL = r.expandURL(config.RunnerUrls.Repository, config.Owner, config.Repository, "")
+    } else if config.Organization != "" {
+        // Organization-level runner
+        registrationURL = r.expandURL(config.RegistrationUrls.Organization, config.Owner, "", config.Organization)
+        runnerURL = r.expandURL(config.RunnerUrls.Organization, config.Owner, "", config.Organization)
+    } else {
+        return nil, fmt.Errorf("either repository or organization must be specified")
+    }
+    
+    // Create HTTP client with configurable timeout
+    timeout := time.Duration(template.Spec.Attestation.Config.HTTPClient.TimeoutSeconds) * time.Second
+    if timeout == 0 {
+        timeout = 30 * time.Second // Default
+    }
+    
+    client := &http.Client{Timeout: timeout}
+    req, err := http.NewRequestWithContext(ctx, "POST", registrationURL, nil)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create request: %w", err)
+    }
+    
+    req.Header.Set("Accept", "application/vnd.github+json")
+    req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", pat))
+    req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+    
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("failed to call GitHub API: %w", err)
+    }
+    defer resp.Body.Close()
+    
+    if resp.StatusCode != http.StatusCreated {
+        body, _ := io.ReadAll(resp.Body)
+        return nil, fmt.Errorf("GitHub API error %d: %s", resp.StatusCode, string(body))
+    }
+    
+    // Parse response matching GitHub's exact format
+    var tokenResp struct {
+        Token     string `json:"token"`
+        ExpiresAt string `json:"expires_at"` // GitHub returns RFC3339 string
+    }
+    
+    if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+        return nil, fmt.Errorf("failed to decode response: %w", err)
+    }
+    
+    // Parse the expires_at timestamp
+    expiresAt, err := time.Parse(time.RFC3339, tokenResp.ExpiresAt)
+    if err != nil {
+        return nil, fmt.Errorf("failed to parse expires_at: %w", err)
+    }
+    
+    // Generate unique runner name
+    runnerName := fmt.Sprintf("%s-%s", claim.Name, claim.UID[:8])
+    
+    // Get labels from workload config
+    labels := []string{"self-hosted", "hyperfleet", "ephemeral"}
+    if workloadConfig := claim.Spec.WorkloadConfig; workloadConfig.Type == "github-actions" {
+        if githubConfig, ok := workloadConfig.Config["github"].(map[string]interface{}); ok {
+            if configLabels, ok := githubConfig["labels"].([]string); ok {
+                labels = append(labels, configLabels...)
+            }
+        }
+    }
+    
+    return &AttestationData{
+        Method:          "runner-token",
+        Platform:        "github-actions",
+        RunnerToken:     tokenResp.Token,
+        RegistrationURL: runnerURL, // Where the runner registers to (not the API endpoint)
+        RunnerName:      runnerName,
+        Labels:          labels,
+        ExpiresAt:       expiresAt,
+        
+        // GitHub runner configuration
+        RunnerConfig: RunnerConfigData{
+            DownloadUrl: config.Runner.DownloadUrl,
+            InstallPath: config.Runner.InstallPath,
+            WorkDir:     config.Runner.WorkDir,
+        },
+    }, nil
+}
+
+// Helper to expand URL templates
+func (r *MachineClaimReconciler) expandURL(template, owner, repo, org string) string {
+    url := strings.ReplaceAll(template, "{owner}", owner)
+    url = strings.ReplaceAll(url, "{repo}", repo)
+    url = strings.ReplaceAll(url, "{org}", org)
+    return url
+}
+
+### GitHub Credentials Configuration
+
+GitHub PATs are stored securely in Kubernetes Secrets and never leave the cluster:
+
+```yaml
+# GitHub credentials secret (PAT never leaves Kubernetes)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-credentials
+  namespace: hyperfleet-system
+  annotations:
+    hyperfleet.io/description: "GitHub PAT for runner registration token generation"
+type: Opaque
+data:
+  pat-token: <base64-encoded-github-pat>
+  # Alternative: GitHub App credentials (recommended for production)
+  # app-id: <base64-encoded-app-id>
+  # private-key: <base64-encoded-private-key>
+
+---
+# RBAC for accessing GitHub credentials (operator only)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: hyperfleet-system
+  name: hyperfleet-github-credentials
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["github-credentials"]
+  verbs: ["get"]
+```
+
+**Security Notes:**
+- **PAT Security**: GitHub PAT remains within Kubernetes cluster boundaries
+- **Minimal Permissions**: PAT only needs `repo:actions` or `org:actions` scope
+- **RBAC Protection**: Only HyperFleet operator can access the secret
+- **Audit Trail**: All PAT usage logged through Kubernetes audit logs
+- **Token Exchange**: PAT used only to generate short-lived registration tokens
+- **No VM Exposure**: PAT never appears in cloud-init, VM filesystem, or Proxmox storage
+
+### GitHub Apps vs Personal Access Tokens (PATs)
+
+GitHub Apps provide superior security compared to PATs for automated systems like HyperFleet:
+
+#### Security Comparison
+
+| Aspect | Personal Access Token (PAT) | GitHub App |
+|--------|----------------------------|------------|
+| **Identity** | Tied to user account | Independent app identity |
+| **Permissions** | User's full permissions | Granular, app-specific permissions |
+| **Scope** | Broad (all repos user can access) | Specific repositories/organizations |
+| **Revocation** | User can revoke, breaking automation | Organization controls, predictable lifecycle |
+| **Audit Trail** | Actions appear as user | Clear "app" attribution in logs |
+| **Rate Limits** | Shared with user's other activities | Dedicated rate limits for the app |
+| **Expiration** | Manual rotation required | Automatic JWT-based authentication |
+| **Compromise Impact** | Full user access exposed | Limited to app's specific permissions |
+
+#### GitHub App Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant K8S as Kubernetes Secret
+    participant OP as HyperFleet Operator
+    participant GH as GitHub API
+    participant VM as Ephemeral VM
+
+    Note over K8S: App ID + Private Key stored in K8s
+    OP->>K8S: Read App ID + Private Key
+    OP->>OP: Generate JWT with Private Key
+    OP->>GH: POST /app/installations/{id}/access_tokens (with JWT)
+    GH->>OP: Return installation access token (1 hour TTL)
+    Note over OP: Installation token used like PAT
+    OP->>GH: POST /registration-token (with installation token)
+    GH->>OP: Return registration token (1 hour TTL)
+    OP->>VM: Inject registration token via cloud-init
+```
+
+#### Why GitHub Apps are More Secure
+
+**1. Principle of Least Privilege:**
+```yaml
+# GitHub App permissions (granular)
+permissions:
+  actions: write          # Only Actions scope
+  metadata: read         # Basic repo metadata
+  # No access to code, issues, PRs, etc.
+
+# vs PAT permissions (broader)
+scopes:
+  - repo                 # Full repository access
+  # or
+  - public_repo         # Still broader than needed
+```
+
+**2. Identity Isolation:**
+- **PAT**: Actions appear as the user who created the token
+- **GitHub App**: Actions clearly attributed to "HyperFleet App"
+- **Audit benefit**: Clear separation between human and automated actions
+
+**3. Credential Rotation:**
+```go
+// GitHub App: Automatic token refresh
+func (r *GitHubAppClient) getInstallationToken(ctx context.Context) (string, error) {
+    // Generate JWT with private key (valid for 10 minutes)
+    jwt := r.generateJWT()
+    
+    // Exchange JWT for installation token (valid for 1 hour)
+    token, err := r.exchangeJWTForToken(ctx, jwt)
+    if err != nil {
+        return "", err
+    }
+    
+    return token.Token, nil
+}
+
+// PAT: Manual rotation required
+func (r *PATClient) getToken(ctx context.Context) (string, error) {
+    // PAT must be manually rotated by user
+    return r.staticPAT, nil
+}
+```
+
+**4. Revocation Control:**
+- **PAT**: User can revoke at any time, breaking automation unexpectedly
+- **GitHub App**: Organization admins control installation, predictable lifecycle
+
+**5. Rate Limiting:**
+- **PAT**: Shares rate limits with user's other GitHub activities
+- **GitHub App**: Dedicated rate limits (5,000 requests/hour per installation)
+
+#### Implementation Differences
+
+**PAT Configuration:**
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-credentials
+data:
+  pat-token: <base64-encoded-pat>  # Long-lived, static token
+```
+
+**GitHub App Configuration:**
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-app-credentials
+data:
+  app-id: <base64-encoded-app-id>           # Public app identifier
+  private-key: <base64-encoded-private-key>  # RSA private key for JWT signing
+  installation-id: <base64-encoded-inst-id>  # Installation ID for organization
+```
+
+**Controller Implementation Changes:**
+```go
+// GitHub App authentication
+func (r *MachineClaimReconciler) generateGitHubAppToken(ctx context.Context, config GitHubAppConfig) (string, error) {
+    // 1. Generate JWT signed with private key
+    jwt, err := r.generateJWT(config.AppID, config.PrivateKey)
+    if err != nil {
+        return "", err
+    }
+    
+    // 2. Exchange JWT for installation access token
+    installationToken, err := r.exchangeJWTForInstallationToken(ctx, jwt, config.InstallationID)
+    if err != nil {
+        return "", err
+    }
+    
+    return installationToken, nil
+}
+
+// Use installation token same as PAT for registration token generation
+func (r *MachineClaimReconciler) generateRegistrationToken(ctx context.Context, accessToken string) (*RegistrationToken, error) {
+    // Same API call, just using installation token instead of PAT
+    req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+    // ... rest of implementation identical
+}
+```
+
+#### Security Benefits in HyperFleet Context
+
+**1. Blast Radius Limitation:**
+- **PAT compromise**: Attacker gets user's full GitHub access
+- **GitHub App compromise**: Attacker only gets Actions permissions on specific repos
+
+**2. Organizational Control:**
+- **PAT**: Depends on individual user account security
+- **GitHub App**: Managed by organization security policies
+
+**3. Compliance and Auditing:**
+- **PAT**: Actions mixed with user's personal GitHub activity
+- **GitHub App**: Clear audit trail for automated actions
+
+**4. Operational Resilience:**
+- **PAT**: Breaks if user leaves organization or changes permissions
+- **GitHub App**: Continues working as long as app is installed
+
+#### Recommendation
+
+**For Production Deployments:**
+Use GitHub Apps for better security, auditability, and operational resilience:
+
+```yaml
+attestation:
+  method: runner-token
+  config:
+    github:
+      # Recommended: GitHub App credentials
+      app:
+        appId:
+          secretKeyRef:
+            name: github-app-credentials
+            key: app-id
+        privateKey:
+          secretKeyRef:
+            name: github-app-credentials
+            key: private-key
+        installationId:
+          secretKeyRef:
+            name: github-app-credentials
+            key: installation-id
+      
+      # Alternative: PAT (simpler setup, less secure)
+      # credentials:
+      #   secretKeyRef:
+      #     name: github-credentials
+      #     key: pat-token
+```
+
+**For Development/Testing:**
+PATs are acceptable for simplicity, but GitHub Apps should be used in production environments.
 
 // Generate unique SPIFFE ID for each MachineClaim
 func (r *MachineClaimReconciler) generateSPIFFEID(claim *hyperfleetv1alpha1.MachineClaim, template *hyperfleetv1alpha1.HypervisorMachineTemplate) string {
@@ -946,11 +1420,33 @@ func (r *MachineClaimReconciler) renderCloudInit(cloudInitTemplate hyperfleetv1a
 
 // Data structures for attestation
 type AttestationData struct {
-    Method     string    `json:"method"`
-    JoinToken  string    `json:"joinToken,omitempty"`
-    TPMDevice  string    `json:"tpmDevice,omitempty"`
-    SPIFFEID   string    `json:"spiffeId"`
-    ExpiresAt  time.Time `json:"expiresAt,omitempty"`
+    Method    string    `json:"method"`
+    
+    // SPIFFE/SPIRE fields (existing)
+    JoinToken string    `json:"joinToken,omitempty"`
+    SPIFFEID  string    `json:"spiffeId,omitempty"`
+    
+    // TPM fields (existing)
+    TPMDevice string    `json:"tpmDevice,omitempty"`
+    
+    // GitHub runner token fields (new)
+    Platform        string    `json:"platform,omitempty"`        // "github-actions"
+    RunnerToken     string    `json:"runnerToken,omitempty"`     // Short-lived registration token
+    RegistrationURL string    `json:"registrationUrl,omitempty"` // Where runner registers to
+    RunnerName      string    `json:"runnerName,omitempty"`      // Unique runner name
+    Labels          []string  `json:"labels,omitempty"`          // Runner labels
+    
+    // GitHub runner configuration
+    RunnerConfig RunnerConfigData `json:"runnerConfig,omitempty"`
+    
+    ExpiresAt time.Time `json:"expiresAt,omitempty"`
+}
+
+// Runner configuration data for cloud-init templating
+type RunnerConfigData struct {
+    DownloadUrl string `json:"download_url,omitempty"` // GitHub Actions runner download URL
+    InstallPath string `json:"install_path,omitempty"` // Installation path on VM
+    WorkDir     string `json:"work_dir,omitempty"`     // Working directory for jobs
 }
 ```
 
@@ -1343,30 +1839,30 @@ func (f *WorkloadProviderFactory) GetProvider(workloadType string) (WorkloadProv
 
 ### Bootstrap Service Architecture
 
-The Bootstrap Service runs ON each ephemeral VM and supports multiple attestation methods and workload types:
+The Bootstrap Service runs ON each ephemeral VM and supports independent SPIFFE attestation and workload credential management:
 
 ```go
 // VM Bootstrap Service (runs on each VM)
 type VMBootstrapService interface {
-    // Generic attestation interface
-    EstablishIdentity(ctx context.Context, method AttestationMethod) (*Identity, error)
+    // SPIFFE attestation (independent of workload)
+    EstablishSPIFFEIdentity(ctx context.Context, method SPIFFEMethod) (*SPIFFEIdentity, error)
     
-    // Generic credential acquisition
-    GetWorkloadCredentials(ctx context.Context, identity *Identity, workloadConfig WorkloadConfig) (*WorkloadCredentials, error)
+    // Workload credential acquisition (can use SPIFFE identity or direct tokens)
+    GetWorkloadCredentials(ctx context.Context, identity *SPIFFEIdentity, workloadConfig WorkloadConfig) (*WorkloadCredentials, error)
     
     // Generic runner lifecycle management
     StartRunner(ctx context.Context, credentials *WorkloadCredentials, workloadConfig WorkloadConfig) error
     MonitorAndTerminate(ctx context.Context) error
 }
 
-// Attestation method interface for extensibility
-type AttestationMethod interface {
+// SPIFFE attestation methods (independent of workload)
+type SPIFFEMethod interface {
     Name() string
-    Attest(ctx context.Context, config AttestationConfig) (*Identity, error)
-    Validate(ctx context.Context, identity *Identity) error
+    Attest(ctx context.Context, config SPIFFEConfig) (*SPIFFEIdentity, error)
+    Validate(ctx context.Context, identity *SPIFFEIdentity) error
 }
 
-// Supported attestation methods
+// Supported SPIFFE attestation methods
 type JoinTokenAttestation struct {
     spireClient spire.Client
     joinToken   string
@@ -1377,11 +1873,17 @@ type TPMAttestation struct {
     spireClient spire.Client
 }
 
-// Generic workload credentials
-type WorkloadCredentials struct {
-    Type        string                 `json:"type"`
-    Credentials map[string]interface{} `json:"credentials"`
-    ExpiresAt   time.Time             `json:"expiresAt"`
+// GitHub-specific bootstrap service (supports both SPIFFE and direct token methods)
+type GitHubBootstrap struct {
+    config *RunnerConfig
+    logger *log.Logger
+}
+
+// SPIFFE identity (optional, can be nil for direct token methods)
+type SPIFFEIdentity struct {
+    SVID      string    `json:"svid"`
+    SPIFFEID  string    `json:"spiffeId"`
+    ExpiresAt time.Time `json:"expiresAt"`
 }
 
 // Workload-specific credential types
@@ -1393,28 +1895,358 @@ type GitHubCredentials struct {
     ExpiresAt       time.Time `json:"expiresAt"`
 }
 
-type GitLabCredentials struct {
-    RunnerToken string    `json:"runnerToken"`
-    GitLabURL   string    `json:"gitlabUrl"`
-    Tags        []string  `json:"tags"`
-    ExpiresAt   time.Time `json:"expiresAt"`
-}
-
-type BuildkiteCredentials struct {
-    AgentToken   string            `json:"agentToken"`
-    Organization string            `json:"organization"`
-    Queue        string            `json:"queue"`
-    Tags         []string          `json:"tags"`
-    Metadata     map[string]string `json:"metadata"`
-    ExpiresAt    time.Time         `json:"expiresAt"`
-}
-
 type VMBootstrap struct {
-    attestationMethod AttestationMethod
-    workloadProvider  WorkloadProvider
-    secretsClient     SecretsClient
-    config           VMConfig
+    spiffeMethod     SPIFFEMethod      // Optional: nil for direct token methods
+    workloadProvider WorkloadProvider
+    secretsClient    SecretsClient     // Optional: nil for direct token methods
+    config          VMConfig
 }
+```
+
+### GitHub Bootstrap Service Implementation
+
+The GitHub bootstrap service supports both SPIFFE attestation and direct runner token methods:
+
+```go
+// Bootstrap service main function
+func main() {
+    configPath := flag.String("config", "/etc/hyperfleet/runner-config.json", "Path to runner configuration")
+    flag.Parse()
+    
+    // Load configuration
+    config, err := loadRunnerConfig(*configPath)
+    if err != nil {
+        log.Fatalf("Failed to load config: %v", err)
+    }
+    
+    // Initialize bootstrap service based on method
+    switch config.Method {
+    case "runner-token":
+        bootstrap := &GitHubBootstrap{
+            config: config,
+            logger: log.New(os.Stdout, "[github-bootstrap] ", log.LstdFlags),
+        }
+        
+        // Handle SPIFFE attestation if enabled (independent of runner token)
+        if config.SPIFFE.Enabled {
+            if err := bootstrap.performSPIFFEAttestation(); err != nil {
+                log.Fatalf("SPIFFE attestation failed: %v", err)
+            }
+        }
+        
+        if err := bootstrap.Run(context.Background()); err != nil {
+            log.Fatalf("GitHub bootstrap failed: %v", err)
+        }
+    
+    case "join-token":
+        // SPIFFE/SPIRE bootstrap implementation
+        bootstrap := &SPIFFEBootstrap{config: config}
+        if err := bootstrap.Run(context.Background()); err != nil {
+            log.Fatalf("SPIFFE bootstrap failed: %v", err)
+        }
+    
+    default:
+        log.Fatalf("Unsupported attestation method: %s", config.Method)
+    }
+}
+
+// GitHub bootstrap service implementation
+func (gb *GitHubBootstrap) Run(ctx context.Context) error {
+    gb.logger.Printf("Starting GitHub runner bootstrap for %s", gb.config.RunnerName)
+    
+    // 1. Download GitHub Actions runner
+    if err := gb.downloadGitHubRunner(ctx); err != nil {
+        return fmt.Errorf("failed to download runner: %w", err)
+    }
+    
+    // 2. Configure runner with registration token
+    if err := gb.configureRunner(ctx); err != nil {
+        return fmt.Errorf("failed to configure runner: %w", err)
+    }
+    
+    // 3. Start runner and monitor
+    if err := gb.runAndMonitor(ctx); err != nil {
+        return fmt.Errorf("failed to run runner: %w", err)
+    }
+    
+    // 4. Cleanup and self-terminate
+    return gb.cleanup(ctx)
+}
+
+func (gb *GitHubBootstrap) downloadGitHubRunner(ctx context.Context) error {
+    // Use configurable download URL and install path
+    downloadURL := gb.config.Runner.DownloadUrl
+    if downloadURL == "" {
+        downloadURL = "https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz"
+    }
+    
+    installPath := gb.config.Runner.InstallPath
+    if installPath == "" {
+        installPath = "/opt/actions-runner"
+    }
+    
+    gb.logger.Printf("Downloading GitHub Actions runner from %s to %s", downloadURL, installPath)
+    
+    // Create runner directory
+    if err := os.MkdirAll(installPath, 0755); err != nil {
+        return fmt.Errorf("failed to create install directory: %w", err)
+    }
+    
+    // Download and extract
+    cmd := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf(`
+        cd %s
+        curl -o actions-runner-linux-x64.tar.gz -L %s
+        tar xzf actions-runner-linux-x64.tar.gz
+        rm actions-runner-linux-x64.tar.gz
+    `, installPath, downloadURL))
+    
+    return cmd.Run()
+}
+
+func (gb *GitHubBootstrap) configureRunner(ctx context.Context) error {
+    gb.logger.Printf("Configuring runner %s", gb.config.RunnerName)
+    
+    installPath := gb.config.Runner.InstallPath
+    if installPath == "" {
+        installPath = "/opt/actions-runner"
+    }
+    
+    workDir := gb.config.Runner.WorkDir
+    if workDir == "" {
+        workDir = "/tmp/runner-work"
+    }
+    
+    configScript := filepath.Join(installPath, "config.sh")
+    
+    cmd := exec.CommandContext(ctx, configScript,
+        "--url", gb.config.RegistrationURL,
+        "--token", gb.config.RunnerToken,
+        "--name", gb.config.RunnerName,
+        "--labels", strings.Join(gb.config.Labels, ","),
+        "--work", workDir,
+        "--unattended",
+        "--ephemeral", // Auto-cleanup after job
+    )
+    
+    cmd.Dir = installPath
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    
+    return cmd.Run()
+}
+
+func (gb *GitHubBootstrap) runAndMonitor(ctx context.Context) error {
+    gb.logger.Printf("Starting GitHub Actions runner")
+    
+    installPath := gb.config.Runner.InstallPath
+    if installPath == "" {
+        installPath = "/opt/actions-runner"
+    }
+    
+    runScript := filepath.Join(installPath, "run.sh")
+    
+    cmd := exec.CommandContext(ctx, runScript)
+    cmd.Dir = installPath
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    
+    // Runner will exit after job completion (ephemeral mode)
+    return cmd.Run()
+}
+
+func (gb *GitHubBootstrap) cleanup(ctx context.Context) error {
+    gb.logger.Printf("Runner completed, initiating VM shutdown")
+    
+    // Clean up runner installation and work directory
+    installPath := gb.config.Runner.InstallPath
+    if installPath == "" {
+        installPath = "/opt/actions-runner"
+    }
+    
+    workDir := gb.config.Runner.WorkDir
+    if workDir == "" {
+        workDir = "/tmp/runner-work"
+    }
+    
+    os.RemoveAll(installPath)
+    os.RemoveAll(workDir)
+    
+    // Shutdown the VM
+    cmd := exec.CommandContext(ctx, "shutdown", "-h", "now")
+    return cmd.Run()
+}
+
+// Runner configuration structure
+type RunnerConfig struct {
+    Method          string    `json:"method"`
+    Platform        string    `json:"platform,omitempty"`        // "github-actions"
+    RunnerToken     string    `json:"runner_token,omitempty"`    // Short-lived registration token
+    RegistrationURL string    `json:"registration_url,omitempty"` // Where runner registers to
+    RunnerName      string    `json:"runner_name,omitempty"`     // Unique runner name
+    Labels          []string  `json:"labels,omitempty"`          // Runner labels
+    ExpiresAt       string    `json:"expires_at,omitempty"`      // Token expiration
+    
+    // GitHub Actions runner configuration
+    Runner struct {
+        DownloadUrl string `json:"download_url,omitempty"` // GitHub Actions runner download URL
+        InstallPath string `json:"install_path,omitempty"` // Installation path on VM
+        WorkDir     string `json:"work_dir,omitempty"`     // Working directory for jobs
+    } `json:"runner,omitempty"`
+    
+    // SPIFFE fields (for join-token method)
+    JoinToken string `json:"join_token,omitempty"`
+    SPIFFEID  string `json:"spiffe_id,omitempty"`
+}
+
+// Load runner configuration from file
+func loadRunnerConfig(configPath string) (*RunnerConfig, error) {
+    data, err := os.ReadFile(configPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+    
+    var config RunnerConfig
+    if err := json.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse config: %w", err)
+    }
+    
+    return &config, nil
+}
+```
+
+### Security Model: PAT vs Registration Token Flow
+
+The `runner-token` method implements a secure token exchange pattern that keeps long-lived credentials within Kubernetes while only exposing short-lived tokens to VMs:
+
+#### Token Flow Security
+
+```mermaid
+sequenceDiagram
+    participant K8S as Kubernetes Secret
+    participant OP as HyperFleet Operator
+    participant GH as GitHub API
+    participant PVE as Proxmox Host
+    participant VM as Ephemeral VM
+
+    Note over K8S: PAT stored securely in K8s Secret
+    OP->>K8S: Read PAT from Secret (in-cluster only)
+    OP->>GH: POST /registration-token (with PAT)
+    GH->>OP: Return short-lived token (1 hour TTL)
+    Note over OP: PAT never leaves Kubernetes cluster
+    OP->>PVE: Inject registration token via cloud-init
+    Note over PVE: Registration token stored on Proxmox disk
+    PVE->>VM: Boot VM with cloud-init data
+    Note over VM: Registration token available in VM
+    VM->>GH: Register runner (with registration token)
+    Note over VM: Registration token expires in 1 hour
+```
+
+#### Security Boundaries
+
+**✅ Secure (PAT never exposed):**
+- **GitHub PAT**: Remains in Kubernetes Secret, never leaves the cluster
+- **Operator memory**: PAT only exists in operator process memory during API call
+- **Network traffic**: PAT only sent over TLS to GitHub API from within cluster
+
+**⚠️ Exposed (Registration token has limited scope):**
+- **Proxmox host disk**: Registration token stored in cloud-init ISO/drive
+- **VM filesystem**: Registration token available in `/etc/hyperfleet/runner-config.json`
+- **VM memory**: Registration token loaded by bootstrap service
+
+#### Risk Mitigation
+
+**Limited Token Scope:**
+- Registration tokens can **only register runners**, not access repositories
+- Tokens expire automatically after 1 hour (GitHub enforced)
+- Tokens are single-use (consumed during runner registration)
+- No repository access, secrets, or administrative permissions
+
+**Ephemeral Exposure:**
+- VMs are destroyed after job completion (typically < 30 minutes)
+- Registration tokens become useless after runner registration
+- No persistent storage of tokens across VM lifecycles
+
+**Comparison to Alternatives:**
+
+| Method | PAT Location | Token Scope | Token Lifetime | Security Level |
+|--------|-------------|-------------|----------------|----------------|
+| **runner-token** | K8s Secret only | Runner registration only | 1 hour | Medium-High |
+| **SPIFFE/SPIRE** | Not needed | Full SVID identity | Configurable | High |
+| **Long-lived runner tokens** | VM filesystem | Full runner access | Indefinite | Low |
+
+#### Security Recommendations
+
+**For Production:**
+1. **Use SPIFFE/SPIRE method** when maximum security is required
+2. **Rotate PATs regularly** (every 90 days recommended)
+3. **Use GitHub Apps** instead of PATs for better audit trails
+4. **Monitor token usage** through GitHub audit logs
+5. **Restrict PAT permissions** to minimum required (Actions scope only)
+
+**For Development/Testing:**
+1. **runner-token method** provides good balance of security and simplicity
+2. **Use dedicated PATs** for HyperFleet (not personal tokens)
+3. **Enable GitHub organization security policies** for additional protection
+
+#### Why Not "insecure"?
+
+The method was previously labeled "insecure" but has been renamed to `runner-token` because:
+- **Security model is robust**: PATs/App credentials never leave Kubernetes
+- **Limited exposure**: Only short-lived registration tokens are exposed
+- **Controlled risk**: Registration tokens have minimal scope and expire quickly
+- **Production ready**: With GitHub Apps, suitable for production environments
+
+The security trade-offs are well-understood and acceptable for most use cases.
+
+### Bootstrap Service Deployment Strategies
+
+The bootstrap service gets into VMs through multiple deployment strategies:
+
+#### Strategy 1: Embedded in VM Template (Recommended)
+
+```bash
+# During VM template creation (see appendix in design doc)
+# 1. Build bootstrap service binary
+cd cmd/bootstrap-service
+go build -o bootstrap-service .
+
+# 2. Copy to template VM during creation
+sudo cp bootstrap-service /opt/hyperfleet/bootstrap-service
+sudo chmod +x /opt/hyperfleet/bootstrap-service
+
+# 3. Template is ready - bootstrap service is "baked in"
+```
+
+#### Strategy 2: Cloud-Init Download (Alternative)
+
+```yaml
+# In HypervisorMachineTemplate cloud-init
+cloudInit:
+  userData: |
+    #cloud-config
+    write_files:
+      - path: /opt/hyperfleet/download-bootstrap.sh
+        content: |
+          #!/bin/bash
+          # Download bootstrap service from operator or registry
+          curl -L -o /opt/hyperfleet/bootstrap-service \
+            "{{ .BootstrapServiceURL }}/bootstrap-service-linux-amd64"
+          chmod +x /opt/hyperfleet/bootstrap-service
+        permissions: '0755'
+    
+    runcmd:
+      - /opt/hyperfleet/download-bootstrap.sh
+      - /opt/hyperfleet/bootstrap-service --config /etc/hyperfleet/runner-config.json
+```
+
+#### Strategy 3: Container Image (Future)
+
+```yaml
+# Bootstrap service as container
+runcmd:
+  - docker run --rm -v /etc/hyperfleet:/config \
+      hyperfleet/bootstrap-service:latest \
+      --config /config/runner-config.json
 ```
 ```
 

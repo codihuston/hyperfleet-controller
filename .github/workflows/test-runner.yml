@@ -1,0 +1,36 @@
+name: Test HyperFleet Runner
+
+on:
+  workflow_dispatch:  # Allows manual triggering
+  push:
+    branches: [ main ]
+    paths:
+      - 'cmd/bootstrap-service/**'
+
+jobs:
+  test-hyperfleet-runner:
+    runs-on: [self-hosted, test, docker, ephemeral]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Test runner environment
+        run: |
+          echo "Runner name: $RUNNER_NAME"
+          echo "Architecture: $(uname -m)"
+          echo "OS: $(uname -s)"
+          echo "Available disk space:"
+          df -h
+          echo "Memory info:"
+          free -h
+          echo "Docker version:"
+          docker --version
+          
+      - name: Test Docker functionality
+        run: |
+          docker run --rm hello-world
+          
+      - name: Success message
+        run: |
+          echo "✅ HyperFleet bootstrap service test completed successfully!"
+          echo "Runner will now terminate and clean up automatically."
