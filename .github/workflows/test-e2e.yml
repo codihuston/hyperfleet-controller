@@ -2,11 +2,14 @@ name: E2E Tests
 
 on:
   push:
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened ]
 
 jobs:
   test-e2e:
-    name: Run on Ubuntu
+    name: Run e2e tests
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code

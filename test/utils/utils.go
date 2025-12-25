@@ -63,7 +63,7 @@ func Run(cmd *exec.Cmd) (string, error) {
 // InstallPrometheusOperator installs the prometheus Operator to be used to export the enabled metrics.
 func InstallPrometheusOperator() error {
 	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
-	cmd := exec.Command("kubectl", "create", "-f", url)
+	cmd := exec.Command("kubectl", "create", "-f", url) // #nosec G204 -- Test utility needs to run kubectl
 	_, err := Run(cmd)
 	return err
 }
@@ -71,7 +71,7 @@ func InstallPrometheusOperator() error {
 // UninstallPrometheusOperator uninstalls the prometheus
 func UninstallPrometheusOperator() {
 	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
-	cmd := exec.Command("kubectl", "delete", "-f", url)
+	cmd := exec.Command("kubectl", "delete", "-f", url) // #nosec G204 -- Test utility needs to run kubectl
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -107,7 +107,7 @@ func IsPrometheusCRDsInstalled() bool {
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "delete", "-f", url)
+	cmd := exec.Command("kubectl", "delete", "-f", url) // #nosec G204 -- Test utility needs to run kubectl
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -116,7 +116,7 @@ func UninstallCertManager() {
 // InstallCertManager installs the cert manager bundle.
 func InstallCertManager() error {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "apply", "-f", url)
+	cmd := exec.Command("kubectl", "apply", "-f", url) // #nosec G204 -- Test utility needs to run kubectl
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func LoadImageToKindClusterWithName(name string) error {
 		cluster = v
 	}
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
-	cmd := exec.Command("kind", kindOptions...)
+	cmd := exec.Command("kind", kindOptions...) // #nosec G204 -- Test utility needs to run kind
 	_, err := Run(cmd)
 	return err
 }
@@ -205,8 +205,8 @@ func GetProjectDir() (string, error) {
 // of the target content. The target content may span multiple lines.
 func UncommentCode(filename, target, prefix string) error {
 	// false positive
-	// nolint:gosec
-	content, err := os.ReadFile(filename)
+	// nolint:gosec,mnd,G304 // Test utility needs to read files, 0644 is standard file permission
+	content, err := os.ReadFile(filename) // #nosec G304 -- Test utility needs to read files
 	if err != nil {
 		return fmt.Errorf("failed to read file %q: %w", filename, err)
 	}
@@ -245,7 +245,8 @@ func UncommentCode(filename, target, prefix string) error {
 	}
 
 	// false positive
-	// nolint:gosec,mnd
+	// nolint:gosec,mnd,G306 // Test utility needs to write files, 0644 is standard file permission
+	// #nosec G306 -- Test utility needs standard file permissions
 	if err = os.WriteFile(filename, out.Bytes(), 0644); err != nil {
 		return fmt.Errorf("failed to write file %q: %w", filename, err)
 	}

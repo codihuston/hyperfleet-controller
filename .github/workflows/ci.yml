@@ -10,45 +10,6 @@ env:
   GO_VERSION: '1.25'
 
 jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-        
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-          
-    - name: Download dependencies
-      run: go mod download
-      
-    - name: Verify dependencies
-      run: go mod verify
-      
-    - name: Run tests
-      run: make test
-      
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./cover.out
-        flags: unittests
-        name: codecov-umbrella
-        
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -61,76 +22,15 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
+        cache: true
         
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-          
-    - name: Run linter
-      run: make lint
-        
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - name: Download dependencies
+      run: go mod download
       
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-        
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-          
-    - name: Build binary
-      run: make build
-      
-    - name: Build Docker image
-      run: make docker-build IMG=hyperfleet-controller:${{ github.sha }}
-      
-  manifests:
-    name: Verify Manifests
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-        
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-          
-    - name: Generate manifests
+    - name: Generate manifests and code
       run: make manifests generate
       
-    - name: Verify no changes
+    - name: Verify no changes to generated files
       run: |
         if [ -n "$(git status --porcelain)" ]; then
           echo "Generated files are out of date. Please run 'make manifests generate' and commit the changes."
@@ -139,6 +39,11 @@ jobs:
           exit 1
         fi
         
+    - name: Run linter
+      uses: golangci/golangci-lint-action@v8
+      with:
+        version: v2.1.0
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -151,9 +56,68 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
+        cache: true
         
-    - name: Install gosec
-      run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+    - name: Download dependencies
+      run: go mod download
+      
+    - name: Run security scan
+      run: make gosec
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
         
-    - name: Run Gosec Security Scanner
-      run: gosec ./...
+    - name: Download dependencies
+      run: go mod download
+      
+    - name: Verify dependencies
+      run: go mod verify
+      
+    - name: Generate manifests and code
+      run: make manifests generate
+      
+    - name: Run tests
+      run: make test COVERAGE_FILE=coverage.txt
+      
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, security, test]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Download dependencies
+      run: go mod download
+      
+    - name: Generate manifests and code
+      run: make manifests generate
+        
+    - name: Build binary
+      run: make build
+      
+    - name: Build Docker image
+      run: make docker-build IMG=hyperfleet-controller:${{ github.sha }}
