@@ -14,7 +14,7 @@ This implementation plan converts the HyperFleet operator design into a series o
   - _Requirements: Requirement 7 (criteria 1, 2)_
 
 - [ ] 2. Define Custom Resource Definitions (CRDs)
-  - [ ] 2.1 Create HypervisorCluster CRD and Go types
+  - [X] 2.1 Create HypervisorCluster CRD and Go types
     - Define HypervisorClusterSpec and HypervisorClusterStatus structs
     - Implement validation webhooks for connection parameters
     - Add kubebuilder markers for OpenAPI schema generation

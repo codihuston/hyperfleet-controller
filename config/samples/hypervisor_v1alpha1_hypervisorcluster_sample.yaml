@@ -1,0 +1,29 @@
+apiVersion: hypervisor.hyperfleet.io/v1alpha1
+kind: HypervisorCluster
+metadata:
+  name: proxmox-test
+  namespace: default
+spec:
+  provider: proxmox
+  endpoint: https://pve.example.com:8006/api2/json
+  credentials:
+    tokenId:
+      name: test-proxmox-credentials
+      key: tokenId
+    tokenSecret:
+      name: test-proxmox-credentials
+      key: tokenSecret
+  nodes:
+    - pve-node-1
+    - pve-node-2
+  defaultStorage: local-lvm
+  defaultNetwork: vmbr0
+  dns:
+    domain: hyperfleet.local
+    servers:
+      - 192.168.1.1
+      - 8.8.8.8
+    registerVMs: false
+  tags:
+    environment: test
+    managed-by: hyperfleet

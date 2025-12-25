@@ -1,0 +1,28 @@
+apiVersion: hypervisor.hyperfleet.io/v1alpha1
+kind: HypervisorCluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: ${NAMESPACE}
+spec:
+  provider: proxmox
+  endpoint: ${PROXMOX_ENDPOINT}
+  credentials:
+    tokenId:
+      name: ${SECRET_NAME}
+      key: tokenId
+    tokenSecret:
+      name: ${SECRET_NAME}
+      key: tokenSecret
+  nodes:
+    - ${NODE_1}
+  defaultStorage: ${DEFAULT_STORAGE}
+  defaultNetwork: ${DEFAULT_NETWORK}
+  dns:
+    domain: ${DNS_DOMAIN}
+    servers:
+      - ${DNS_SERVER_1}
+      - ${DNS_SERVER_2}
+    registerVMs: false
+  tags:
+    environment: ${ENVIRONMENT}
+    managed-by: hyperfleet
