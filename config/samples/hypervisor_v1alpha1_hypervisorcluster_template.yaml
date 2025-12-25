@@ -13,6 +13,15 @@ spec:
     tokenSecret:
       name: ${SECRET_NAME}
       key: tokenSecret
+  # TLS configuration for secure connections
+  tls:
+    # WARNING: Only set insecureSkipVerify to true for testing or trusted environments
+    # with self-signed certificates. This makes connections vulnerable to MITM attacks.
+    insecureSkipVerify: ${INSECURE_SKIP_VERIFY:-false}
+    # TODO: Add CA certificate support in future iteration
+    # caCertificate:
+    #   name: proxmox-ca-cert
+    #   key: ca.crt
   nodes:
     - ${NODE_1}
   defaultStorage: ${DEFAULT_STORAGE}

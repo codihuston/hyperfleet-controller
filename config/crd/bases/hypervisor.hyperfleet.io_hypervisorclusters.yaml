@@ -310,6 +310,45 @@ spec:
                 description: Tags are key-value pairs applied to all VMs created on
                   this cluster
                 type: object
+              tls:
+                description: TLS contains TLS/SSL configuration for hypervisor connections
+                properties:
+                  caCertificate:
+                    description: |-
+                      CACertificate references a secret containing the CA certificate to trust
+                      for TLS connections. This allows secure connections to hypervisors using
+                      self-signed or internal CA certificates.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  insecureSkipVerify:
+                    default: false
+                    description: |-
+                      InsecureSkipVerify controls whether to skip TLS certificate verification.
+                      WARNING: Setting this to true makes connections vulnerable to man-in-the-middle attacks.
+                      Only use this for testing or when connecting to hypervisors with self-signed certificates
+                      in trusted environments.
+                    type: boolean
+                type: object
             required:
             - credentials
             - defaultNetwork

@@ -38,6 +38,10 @@ type HypervisorClusterSpec struct {
 	// +kubebuilder:validation:Required
 	Credentials HypervisorCredentials `json:"credentials"`
 
+	// TLS contains TLS/SSL configuration for hypervisor connections
+	// +optional
+	TLS *TLSConfig `json:"tls,omitempty"`
+
 	// Nodes is a list of hypervisor nodes available in this cluster
 	// +kubebuilder:validation:MinItems=1
 	Nodes []string `json:"nodes"`
@@ -76,6 +80,23 @@ type HypervisorCredentials struct {
 	// Password references a secret containing the password (alternative auth)
 	// +optional
 	Password *corev1.SecretKeySelector `json:"password,omitempty"`
+}
+
+// TLSConfig defines TLS/SSL configuration for hypervisor connections.
+type TLSConfig struct {
+	// InsecureSkipVerify controls whether to skip TLS certificate verification.
+	// WARNING: Setting this to true makes connections vulnerable to man-in-the-middle attacks.
+	// Only use this for testing or when connecting to hypervisors with self-signed certificates
+	// in trusted environments.
+	// +kubebuilder:default=false
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+
+	// CACertificate references a secret containing the CA certificate to trust
+	// for TLS connections. This allows secure connections to hypervisors using
+	// self-signed or internal CA certificates.
+	// +optional
+	CACertificate *corev1.SecretKeySelector `json:"caCertificate,omitempty"`
 }
 
 // DNSConfig defines DNS settings for VMs created on this cluster.

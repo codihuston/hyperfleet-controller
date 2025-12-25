@@ -35,6 +35,16 @@ import (
 	"github.com/codihuston/hyperfleet-operator/internal/provider"
 )
 
+const (
+	// RequeueInterval defines how often to requeue reconciliation for periodic connection checks
+	RequeueInterval = 5 * time.Minute
+	// DefaultTimeout defines the default timeout for hypervisor client operations
+	DefaultTimeout = 300 // 5 minutes in seconds
+	// DefaultInsecureSkipVerify defines the default TLS verification behavior
+	// Set to false by default for security - users must explicitly configure insecure connections
+	DefaultInsecureSkipVerify = false
+)
+
 // HypervisorClusterReconciler reconciles a HypervisorCluster object
 type HypervisorClusterReconciler struct {
 	client.Client
@@ -75,8 +85,8 @@ func (r *HypervisorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	// Requeue after 5 minutes to periodically check connection
-	return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
+	// Requeue after defined interval to periodically check connection
+	return ctrl.Result{RequeueAfter: RequeueInterval}, nil
 }
 
 // testConnection tests the connection to the hypervisor using the provider adapter
@@ -97,13 +107,24 @@ func (r *HypervisorClusterReconciler) testConnection(ctx context.Context, cluste
 		return result
 	}
 
-	// Create client configuration
+	// Create client configuration with secure TLS defaults
+	// #nosec G402 -- User-configurable TLS with secure defaults (defaults to false)
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: DefaultInsecureSkipVerify, // Secure by default
+	}
+
+	// Apply user-specified TLS configuration if provided
+	if cluster.Spec.TLS != nil {
+		tlsConfig.InsecureSkipVerify = cluster.Spec.TLS.InsecureSkipVerify
+
+		// TODO: Implement CA certificate loading from cluster.Spec.TLS.CACertificate
+		// This will be added in a future iteration to support custom CA certificates
+	}
+
 	clientConfig := &provider.ClientConfig{
-		Endpoint: cluster.Spec.Endpoint,
-		TLSConfig: &tls.Config{
-			InsecureSkipVerify: true, // Allow self-signed certificates for now
-		},
-		Timeout: 300, // 5 minutes
+		Endpoint:  cluster.Spec.Endpoint,
+		TLSConfig: tlsConfig,
+		Timeout:   DefaultTimeout,
 	}
 
 	// Create hypervisor client using the factory
@@ -117,7 +138,11 @@ func (r *HypervisorClusterReconciler) testConnection(ctx context.Context, cluste
 		logger.Error(err, "Failed to create hypervisor client", "provider", cluster.Spec.Provider)
 		return result
 	}
-	defer hypervisorClient.Close()
+	defer func() {
+		if closeErr := hypervisorClient.Close(); closeErr != nil {
+			logger.Error(closeErr, "Failed to close hypervisor client")
+		}
+	}()
 
 	// Test the connection
 	connInfo, err := hypervisorClient.TestConnection(ctx)

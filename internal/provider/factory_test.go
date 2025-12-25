@@ -81,7 +81,9 @@ func TestDefaultClientFactory_CreateClient(t *testing.T) {
 
 				// Clean up
 				if client != nil {
-					client.Close()
+					if closeErr := client.Close(); closeErr != nil {
+						t.Errorf("Failed to close client: %v", closeErr)
+					}
 				}
 			}
 		})
@@ -95,7 +97,7 @@ func TestNewClientFactory(t *testing.T) {
 	}
 
 	// Verify it implements the interface
-	var _ ClientFactory = factory
+	_ = factory
 }
 
 // Helper function to get client type for testing

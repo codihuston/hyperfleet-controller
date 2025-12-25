@@ -95,9 +95,8 @@ func TestProxmoxClient_Close(t *testing.T) {
 		t.Fatalf("failed to create client: %v", err)
 	}
 
-	err = client.Close()
-	if err != nil {
-		t.Errorf("unexpected error closing client: %v", err)
+	if closeErr := client.Close(); closeErr != nil {
+		t.Errorf("unexpected error closing client: %v", closeErr)
 	}
 }
 
@@ -127,7 +126,11 @@ func TestProxmoxClient_TestConnection_InvalidAuth(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to create client: %v", err)
 			}
-			defer client.Close()
+			defer func() {
+				if closeErr := client.Close(); closeErr != nil {
+					t.Errorf("Failed to close client: %v", closeErr)
+				}
+			}()
 
 			ctx := context.Background()
 			_, err = client.TestConnection(ctx)
