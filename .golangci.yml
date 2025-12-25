@@ -1,127 +1,40 @@
+version: "2"
+
 run:
   timeout: 5m
   issues-exit-code: 1
   tests: true
   modules-download-mode: readonly
 
-output:
-  formats:
-    - format: colored-line-number
-      path: stdout
-  print-issued-lines: true
-  print-linter-name: true
-  uniq-by-line: true
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-  
-  gofmt:
-    simplify: true
-  
-  goimports:
-    local-prefixes: github.com/codihuston/hyperfleet-controller
-  
-  golint:
-    min-confidence: 0.8
-  
-  govet:
-    check-shadowing: true
-    enable-all: true
-  
-  lll:
-    line-length: 120
-  
-  misspell:
-    locale: US
-  
-  nolintlint:
-    allow-leading-space: false
-    allow-unused: false
-    require-explanation: true
-    require-specific: true
-
 linters:
   enable:
     - bodyclose
-    - deadcode
-    - depguard
+    - copyloopvar
     - dogsled
-    - dupl
     - errcheck
-    - exportloopref
     - exhaustive
-    - funlen
-    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
-    - gofmt
-    - goimports
-    - golint
-    - gomnd
+    - mnd
     - goprintffuncname
-    - gosec
-    - gosimple
     - govet
     - ineffassign
-    - interfacer
-    - lll
     - misspell
     - nakedret
     - noctx
-    - nolintlint
     - rowserrcheck
-    - scopelint
     - staticcheck
-    - structcheck
-    - stylecheck
-    - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
   
   disable:
-    - maligned  # deprecated
-    - prealloc  # too many false positives
-
-issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - errcheck
-        - dupl
-        - gosec
-        - funlen
-    
-    # Exclude known linter issues
-    - path: ".*"
-      text: "weak cryptographic primitive"
-      linters:
-        - gosec
-    
-    # Exclude shadow checking on err variables
-    - text: "shadow: declaration of \"err\""
-      linters:
-        - govet
-  
-  exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
+    - prealloc
+    - depguard
+    - dupl
+    - funlen
+    - gochecknoinits
+    - gosec
+    - lll
