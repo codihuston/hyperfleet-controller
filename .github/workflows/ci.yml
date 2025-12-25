@@ -103,6 +103,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for GoReleaser
       
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -116,8 +118,30 @@ jobs:
     - name: Generate manifests and code
       run: make manifests generate
         
-    - name: Build binary
+    - name: Build binaries with GoReleaser
       run: make build
       
-    - name: Build Docker image
+    - name: Upload bootstrap service artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bootstrap-service-binaries
+        path: |
+          dist/bootstrap-service_linux_amd64_v1/bootstrap-service
+          dist/bootstrap-service_linux_arm64/bootstrap-service
+          dist/bootstrap-service_darwin_amd64_v1/bootstrap-service
+          dist/bootstrap-service_darwin_arm64/bootstrap-service
+        retention-days: 30
+        
+    - name: Upload operator artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: operator-binaries
+        path: |
+          dist/manager_linux_amd64_v1/manager
+          dist/manager_linux_arm64/manager
+          dist/manager_darwin_amd64_v1/manager
+          dist/manager_darwin_arm64/manager
+        retention-days: 30
+      
+    - name: Build Docker image (legacy)
       run: make docker-build IMG=hyperfleet-controller:${{ github.sha }}

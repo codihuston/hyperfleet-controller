@@ -1,0 +1,140 @@
+version: 2
+
+project_name: hyperfleet-operator
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  # Main operator binary
+  - id: operator
+    main: ./cmd/main.go
+    binary: manager
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+  # Bootstrap service binary
+  - id: bootstrap-service
+    main: ./cmd/bootstrap-service/main.go
+    binary: bootstrap-service
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: operator
+    builds:
+      - operator
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - LICENSE*
+      - README*
+      - CHANGELOG*
+
+  - id: bootstrap-service
+    builds:
+      - bootstrap-service
+    name_template: "{{ .ProjectName }}-bootstrap-service_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - LICENSE*
+      - README*
+      - cmd/bootstrap-service/README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+
+release:
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} {{.Version}}"
+  header: |
+    ## HyperFleet Operator {{.Version}}
+    
+    ### Changes
+  footer: |
+    ## Docker Images
+    
+    ```bash
+    docker pull ghcr.io/codihuston/hyperfleet-operator:{{.Version}}
+    ```
+    
+    ### Bootstrap Service Binaries
+    
+    The bootstrap service binaries are available for Linux AMD64 and ARM64 architectures.
+    These binaries are designed to be embedded in VM templates for GitHub Actions runner provisioning.
+
+# Docker images
+dockers:
+  - image_templates:
+      - "ghcr.io/codihuston/hyperfleet-operator:{{ .Version }}-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    extra_files:
+      - config/
+
+  - image_templates:
+      - "ghcr.io/codihuston/hyperfleet-operator:{{ .Version }}-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    extra_files:
+      - config/
+
+docker_manifests:
+  - name_template: "ghcr.io/codihuston/hyperfleet-operator:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/codihuston/hyperfleet-operator:{{ .Version }}-amd64"
+      - "ghcr.io/codihuston/hyperfleet-operator:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/codihuston/hyperfleet-operator:latest"
+    image_templates:
+      - "ghcr.io/codihuston/hyperfleet-operator:{{ .Version }}-amd64"
+      - "ghcr.io/codihuston/hyperfleet-operator:{{ .Version }}-arm64"

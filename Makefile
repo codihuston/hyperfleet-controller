@@ -162,8 +162,12 @@ gosec: gosec-tool ## Run gosec security scanner
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+build: manifests generate fmt vet goreleaser ## Build manager and bootstrap service binaries using GoReleaser.
+	$(GORELEASER) build --snapshot --clean
+
+.PHONY: build-bootstrap
+build-bootstrap: fmt vet ## Build bootstrap service binary.
+	go build -o bin/bootstrap-service cmd/bootstrap-service/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -241,6 +245,7 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GOSEC = $(LOCALBIN)/gosec
+GORELEASER = $(LOCALBIN)/goreleaser
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.6.0
@@ -251,6 +256,7 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.1.0
 GOSEC_VERSION ?= v2.22.5
+GORELEASER_VERSION ?= v2.5.0
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -284,6 +290,11 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 gosec-tool: $(GOSEC) ## Download gosec locally if necessary.
 $(GOSEC): $(LOCALBIN)
 	$(call go-install-tool,$(GOSEC),github.com/securego/gosec/v2/cmd/gosec,$(GOSEC_VERSION))
+
+.PHONY: goreleaser
+goreleaser: $(GORELEASER) ## Download goreleaser locally if necessary.
+$(GORELEASER): $(LOCALBIN)
+	$(call go-install-tool,$(GORELEASER),github.com/goreleaser/goreleaser/v2,$(GORELEASER_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
