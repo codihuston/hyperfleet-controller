@@ -1,7 +1,5 @@
-## Append samples of your project ##
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
 resources:
-- hypervisor_v1alpha1_hypervisorcluster.yaml
-- hypervisor_v1alpha1_hypervisormachinetemplate.yaml
-- hypervisor_v1alpha1_machineclaim.yaml
-- hypervisor_v1alpha1_runnerpool.yaml
-# +kubebuilder:scaffold:manifestskustomizesamples
+- hypervisor_v1alpha1_hypervisorcluster_template.yaml

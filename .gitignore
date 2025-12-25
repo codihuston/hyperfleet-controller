@@ -46,6 +46,13 @@ Thumbs.db
 /testbin/*
 /cover.out
 
+# Controller-gen and other generated binaries
+bin/controller-gen*
+bin/golangci-lint*
+bin/gosec*
+bin/kustomize*
+bin/setup-envtest*
+
 # Kustomize
 /config/default/kustomization.yaml
 
@@ -129,3 +136,4 @@ zz_generated.*.go
 Network Trash Folder
 Temporary Items
 .apdisk
+poc

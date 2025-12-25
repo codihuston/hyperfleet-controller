@@ -157,7 +157,7 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 .PHONY: gosec
 gosec: gosec-tool ## Run gosec security scanner
-	$(GOSEC) ./...
+	$(GOSEC) -exclude-dir=poc ./...
 
 ##@ Build
 

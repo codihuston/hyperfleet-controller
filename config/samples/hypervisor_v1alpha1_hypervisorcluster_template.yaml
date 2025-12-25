@@ -1,0 +1,38 @@
+apiVersion: hypervisor.hyperfleet.io/v1alpha1
+kind: HypervisorCluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: ${NAMESPACE}
+spec:
+  provider: proxmox
+  endpoint: ${PROXMOX_ENDPOINT}
+  credentials:
+    tokenId:
+      name: ${SECRET_NAME}
+      key: tokenId
+    tokenSecret:
+      name: ${SECRET_NAME}
+      key: tokenSecret
+  # TLS configuration for secure connections
+  tls:
+    # WARNING: Only set insecureSkipVerify to true for testing or trusted environments
+    # with self-signed certificates. This makes connections vulnerable to MITM attacks.
+    insecureSkipVerify: ${INSECURE_SKIP_VERIFY:-false}
+    # TODO: Add CA certificate support in future iteration
+    # caCertificate:
+    #   name: proxmox-ca-cert
+    #   key: ca.crt
+  nodes:
+    - ${NODE_1}
+  defaultStorage: ${DEFAULT_STORAGE}
+  defaultNetwork: ${DEFAULT_NETWORK}
+  dns:
+    domain: ${DNS_DOMAIN}
+    # DNS servers for VMs - if omitted, VMs will use DHCP-assigned DNS servers
+    servers:
+      - ${DNS_SERVER_1}
+      - ${DNS_SERVER_2}
+    registerVMs: false
+  tags:
+    environment: ${ENVIRONMENT}
+    managed-by: hyperfleet

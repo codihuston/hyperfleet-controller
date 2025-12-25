@@ -1,110 +1,81 @@
 # Pull Request
 
-## Description
-Brief description of the changes and why they are needed.
+## Goal
+<!-- Describe what this PR is trying to achieve -->
 
-Fixes # (issue)
+## Changes Made
+<!-- List the specific changes made in this PR -->
 
 ## Type of Change
-Please delete options that are not relevant.
+<!-- Check all that apply -->
+- [ ] 🐛 Bug fix (non-breaking change which fixes an issue)
+- [ ] ✨ New feature (non-breaking change which adds functionality)
+- [ ] 💥 Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] 📚 Documentation update
+- [ ] 🔧 Configuration change
+- [ ] 🧪 Test changes
+- [ ] 🔒 Security changes
+- [ ] 🏗️ Infrastructure/CI changes
+- [ ] 🧹 Code cleanup/refactoring
 
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
-- [ ] Performance improvement
-- [ ] Code refactoring (no functional changes)
-- [ ] CI/CD changes
-- [ ] Dependencies update
+## Impact Assessment
+<!-- Check all that apply -->
+- [ ] **Product Changes**: User-facing functionality modified
+- [ ] **API Changes**: Custom Resource Definitions or API modified
+- [ ] **Security Changes**: Authentication, authorization, or security-related changes
+- [ ] **Performance Impact**: Changes that may affect performance
+- [ ] **Breaking Changes**: Changes that break backward compatibility
+- [ ] **Database/Storage Changes**: Changes to data persistence or storage
+- [ ] **Configuration Changes**: Environment variables, config files, or deployment configs modified
 
 ## Testing
-Describe the tests that you ran to verify your changes. Provide instructions so we can reproduce.
+<!-- Check all that apply -->
+- [ ] Unit tests added/updated
+- [ ] Integration tests added/updated
+- [ ] End-to-end tests added/updated
+- [ ] Manual testing completed
+- [ ] Property-based tests added/updated (if applicable)
 
-- [ ] Unit tests pass locally (`make test`)
-- [ ] Linting passes locally (`make lint`)
-- [ ] Security scan passes locally (`make gosec`)
-- [ ] E2E tests pass locally (`make test-e2e`)
-- [ ] Manual testing performed (describe below)
-
-**Manual Testing Details:**
-<!-- Describe any manual testing performed -->
-
-## Change Categories
-Please check all that apply:
-
-### Product Changes
-- [ ] New Custom Resource Definitions (CRDs)
-- [ ] Changes to existing CRD schemas
-- [ ] New controller functionality
-- [ ] Changes to reconciliation logic
-- [ ] New API endpoints or modifications
-- [ ] Changes to operator behavior
-- [ ] Configuration changes
-
-### Testing Changes
-- [ ] New unit tests added
-- [ ] Existing unit tests modified
-- [ ] New integration tests added
-- [ ] E2E tests added or modified
-- [ ] Test fixtures or mocks updated
-- [ ] Test coverage improved
-
-### Security Changes
-- [ ] Authentication/authorization changes
-- [ ] RBAC permissions modified
-- [ ] Secret handling changes
-- [ ] Network security policies updated
-- [ ] Vulnerability fixes
-- [ ] Security scanning configuration changes
-
-### Documentation Changes
-- [ ] README updates
-- [ ] API documentation changes
-- [ ] Code comments added/updated
-- [ ] Architecture documentation updates
-- [ ] User guide changes
-- [ ] Developer documentation updates
-
-### Infrastructure/Build Changes
-- [ ] Dockerfile changes
-- [ ] CI/CD pipeline modifications
-- [ ] Makefile updates
-- [ ] Dependency updates
-- [ ] Build process changes
-- [ ] Container image changes
-
-### Refactoring
-- [ ] Code structure improvements
-- [ ] Performance optimizations
-- [ ] Technical debt reduction
-- [ ] Code style/formatting changes
-- [ ] Package/module reorganization
-- [ ] Interface simplification
-
-## Changelog
-- [ ] Changelog entry added (if user-facing changes)
-- [ ] Breaking changes documented
-- [ ] Migration guide provided (if needed)
-
-## Deployment Considerations
-- [ ] Database migrations required
-- [ ] Configuration changes required
-- [ ] Backward compatibility maintained
-- [ ] Rollback plan considered
-- [ ] Resource requirements changed
+## Documentation
+<!-- Check all that apply -->
+- [ ] Code comments updated
+- [ ] README updated
+- [ ] API documentation updated
+- [ ] Architecture documentation updated
+- [ ] Changelog updated
 
 ## Checklist
-- [ ] My code follows the project's style guidelines
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation
-- [ ] My changes generate no new warnings
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
-- [ ] Any dependent changes have been merged and published
+<!-- Ensure all items are completed before requesting review -->
+- [ ] Code follows the project's coding standards
+- [ ] Self-review of code completed
+- [ ] Code is properly commented, particularly in hard-to-understand areas
+- [ ] Corresponding changes to documentation made
+- [ ] Changes generate no new warnings
+- [ ] All tests pass locally
+- [ ] Lint checks pass
+- [ ] Conventional commit format used
+- [ ] PR title follows conventional commit format
 
-## Screenshots (if applicable)
-<!-- Add screenshots to help explain your changes -->
+## Related Issues
+<!-- Link any related issues -->
+Closes #
+Relates to #
 
-## Additional Notes
-<!-- Any additional information that reviewers should know -->
+## Screenshots/Logs
+<!-- If applicable, add screenshots or logs to help explain the changes -->
+
+## Deployment Notes
+<!-- Any special deployment considerations -->
+
+## Rollback Plan
+<!-- How to rollback these changes if needed -->
+
+---
+
+**Reviewer Guidelines:**
+- [ ] Code quality and adherence to standards
+- [ ] Test coverage is adequate
+- [ ] Documentation is clear and complete
+- [ ] Security implications considered
+- [ ] Performance implications considered
+- [ ] Breaking changes properly communicated

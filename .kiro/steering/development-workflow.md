@@ -12,6 +12,7 @@
 - **Follow Conventional Commits specification** ([conventionalcommits.org](https://www.conventionalcommits.org/en/v1.0.0/))
 - Write clear, descriptive commit messages with proper type prefixes
 - Ensure all tests pass before committing
+- **Run linting and security checks before committing**: `make lint` and `make gosec` must pass with zero issues
 - Include relevant test coverage with each feature commit
 
 #### Conventional Commit Format
@@ -79,12 +80,14 @@ git commit -m "ci(github): add automated testing workflow"
 #### Workflow Steps
 1. Create short-lived branch from main: `git checkout -b feature/vm-lifecycle`
 2. Make changes and write tests
-3. Run tests locally to ensure they pass
-4. **PROMPT**: "Ready to commit these changes?"
-5. After commit confirmation, **PROMPT**: "Ready to push this branch?"
-6. Create PR immediately after pushing (even if work in progress)
-7. Merge to main after review and CI validation
-8. Delete feature branch after merge
+3. **Generate manifests if API changes were made**: `make manifests` (for CRD/RBAC changes)
+4. Run tests locally to ensure they pass
+5. **Run linting and security checks**: `make lint` and `make gosec` must pass
+6. **PROMPT**: "Ready to commit these changes?"
+7. After commit confirmation, **PROMPT**: "Ready to push this branch?"
+8. Create PR immediately after pushing (even if work in progress)
+9. Merge to main after review and CI validation
+10. Delete feature branch after merge
 
 ### Pull Request Strategy
 - **Create PRs early and often** - even for work in progress
@@ -157,8 +160,10 @@ return r.legacyVMLifecycleHandler(ctx, vm)
 ## Code Review Readiness
 
 ### PR Preparation
-- Ensure all tests pass locally
-- Run linting and formatting tools
+- **Generate manifests if API changes were made**: `make manifests` (for CRD/RBAC changes)
+- Ensure all tests pass locally: `make test`
+- **Run linting and fix all issues**: `make lint` must pass
+- **Run security scanning**: `make gosec` must pass with no critical/high issues
 - Include test coverage for new functionality
 - Keep PRs focused and reviewable
 - Write clear PR descriptions explaining changes
@@ -166,5 +171,16 @@ return r.legacyVMLifecycleHandler(ctx, vm)
 ### Quality Gates
 - All code must be tested
 - No failing tests in commits
+- **Zero linting errors**: `make lint` must pass with no issues
+- **Zero security issues**: `make gosec` must pass with no critical/high severity issues
 - Follow Go best practices and project conventions
 - Include documentation updates when needed
+
+### Pre-Commit Checklist
+Before every commit, ensure:
+1. **Generate manifests if API changes were made**: `make manifests` (for CRD/RBAC changes)
+2. `make test` passes (all tests green)
+3. `make lint` passes (zero linting issues)
+4. `make gosec` passes (no critical/high security issues)
+5. Code follows Go best practices and project conventions
+6. Commit message follows conventional commit format

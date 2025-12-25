@@ -8,13 +8,31 @@ metadata:
 spec:
   group: hypervisor.hyperfleet.io
   names:
+    categories:
+    - hyperfleet
     kind: HypervisorCluster
     listKind: HypervisorClusterList
     plural: hypervisorclusters
     singular: hypervisorcluster
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .spec.endpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .status.connectedNodes
+      name: Nodes
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: HypervisorCluster is the Schema for the hypervisorclusters API.
@@ -39,13 +57,403 @@ spec:
           spec:
             description: HypervisorClusterSpec defines the desired state of HypervisorCluster.
             properties:
-              foo:
-                description: Foo is an example field of HypervisorCluster. Edit hypervisorcluster_types.go
-                  to remove/update
+              credentials:
+                description: Credentials contains authentication information for the
+                  hypervisor
+                properties:
+                  password:
+                    description: Password references a secret containing the password
+                      (alternative auth)
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  tokenId:
+                    description: TokenID references a secret containing the API token
+                      ID (Proxmox)
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  tokenSecret:
+                    description: TokenSecret references a secret containing the API
+                      token secret (Proxmox)
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  username:
+                    description: Username references a secret containing the username
+                      (alternative auth)
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
+              defaultNetwork:
+                description: DefaultNetwork specifies the default network bridge for
+                  VMs
                 type: string
+              defaultStorage:
+                description: DefaultStorage specifies the default storage pool for
+                  VMs
+                type: string
+              dns:
+                description: DNS configuration for VMs created on this cluster
+                properties:
+                  dnsProvider:
+                    description: DNSProvider contains configuration for external DNS
+                      provider
+                    properties:
+                      credentials:
+                        description: Credentials contains provider-specific authentication
+                        properties:
+                          accessKeyId:
+                            description: AccessKeyID references a secret containing
+                              AWS access key ID (Route53)
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          apiToken:
+                            description: APIToken references a secret containing API
+                              token (Cloudflare, etc.)
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          secretAccessKey:
+                            description: SecretAccessKey references a secret containing
+                              AWS secret access key (Route53)
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                      type:
+                        description: Type specifies the DNS provider type (e.g., "route53",
+                          "cloudflare")
+                        enum:
+                        - route53
+                        - cloudflare
+                        - azure
+                        - gcp
+                        type: string
+                    required:
+                    - credentials
+                    - type
+                    type: object
+                  domain:
+                    description: Domain is the default domain for VM FQDNs
+                    type: string
+                  registerVMs:
+                    default: false
+                    description: RegisterVMs indicates whether to register VMs in
+                      external DNS
+                    type: boolean
+                  servers:
+                    description: |-
+                      Servers is a list of DNS servers for VMs
+                      If empty, VMs will use DHCP-assigned DNS servers
+                    items:
+                      type: string
+                    type: array
+                required:
+                - domain
+                - registerVMs
+                type: object
+              endpoint:
+                description: Endpoint is the API endpoint URL for the hypervisor
+                pattern: ^https?://.*
+                type: string
+              nodes:
+                description: Nodes is a list of hypervisor nodes available in this
+                  cluster
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              provider:
+                description: Provider specifies the hypervisor type (e.g., "proxmox")
+                enum:
+                - proxmox
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: Tags are key-value pairs applied to all VMs created on
+                  this cluster
+                type: object
+              tls:
+                description: TLS contains TLS/SSL configuration for hypervisor connections
+                properties:
+                  caCertificate:
+                    description: |-
+                      CACertificate references a secret containing the CA certificate to trust
+                      for TLS connections. This allows secure connections to hypervisors using
+                      self-signed or internal CA certificates.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  insecureSkipVerify:
+                    default: false
+                    description: |-
+                      InsecureSkipVerify controls whether to skip TLS certificate verification.
+                      WARNING: Setting this to true makes connections vulnerable to man-in-the-middle attacks.
+                      Only use this for testing or when connecting to hypervisors with self-signed certificates
+                      in trusted environments.
+                    type: boolean
+                type: object
+            required:
+            - credentials
+            - defaultNetwork
+            - defaultStorage
+            - endpoint
+            - nodes
+            - provider
             type: object
           status:
             description: HypervisorClusterStatus defines the observed state of HypervisorCluster.
+            properties:
+              availableResources:
+                description: AvailableResources represents the total available resources
+                  across all nodes
+                properties:
+                  cpu:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: CPU represents total available CPU cores
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  memory:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: Memory represents total available memory
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  storage:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: Storage represents total available storage
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the cluster's state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              connectedNodes:
+                description: ConnectedNodes is the number of nodes currently connected
+                  and available
+                format: int32
+                type: integer
+              lastSyncTime:
+                description: LastSyncTime is the last time the cluster status was
+                  synchronized
+                format: date-time
+                type: string
             type: object
         type: object
     served: true
