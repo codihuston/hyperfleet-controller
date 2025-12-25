@@ -1,0 +1,9 @@
+apiVersion: hypervisor.hyperfleet.io/v1alpha1
+kind: RunnerPool
+metadata:
+  labels:
+    app.kubernetes.io/name: hyperfleet-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: runnerpool-sample
+spec:
+  # TODO(user): Add fields here

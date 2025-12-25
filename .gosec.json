@@ -1,0 +1,12 @@
+{
+  "severity": "medium",
+  "confidence": "medium",
+  "exclude": {
+    "G204": "test/",
+    "G304": "test/",
+    "G306": "test/"
+  },
+  "exclude-dir": [
+    "test/"
+  ]
+}

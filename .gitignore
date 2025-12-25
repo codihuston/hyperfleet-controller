@@ -1,1 +1,131 @@
-tmp
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+testbin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Go module cache
+go.sum
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Kubernetes operator specific
+# Kubebuilder
+/bin
+/testbin/*
+/cover.out
+
+# Kustomize
+/config/default/kustomization.yaml
+
+# Helm charts (if generated)
+/charts
+
+# Local development
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Test coverage
+coverage.html
+coverage.out
+coverage.txt
+
+# Local cluster configs
+kubeconfig
+*.kubeconfig
+
+# Certificate files
+*.pem
+*.key
+*.crt
+*.csr
+
+# Backup files
+*.bak
+*.backup
+
+# Docker
+.dockerignore
+
+# Local development overrides
+docker-compose.override.yml
+local.yml
+
+# Operator SDK
+/bundle
+/bundle.Dockerfile
+
+# Generated files
+zz_generated.*.go
+
+# Local testing
+/test/e2e/bin
+/test/integration/bin
+
+# IDE specific
+.vscode/settings.json
+.vscode/launch.json
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
