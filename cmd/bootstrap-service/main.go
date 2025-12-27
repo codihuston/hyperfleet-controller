@@ -21,8 +21,8 @@ import (
 // Default configuration values
 const (
 	DefaultDownloadURL  = "https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz"
-	DefaultInstallPath  = "/opt/actions-runner"
-	DefaultWorkDir      = "/tmp/runner-work"
+	DefaultInstallPath  = "/tmp/hyperfleet"
+	DefaultWorkDir      = "/tmp/hyperfleet-work"
 	DefaultConfigPath   = "/etc/hyperfleet/runner-config.json"
 	DefaultConfigScript = "config.sh"
 	DefaultRunScript    = "run.sh"
