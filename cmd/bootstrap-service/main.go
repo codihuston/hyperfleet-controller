@@ -11,10 +11,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -33,6 +33,10 @@ const (
 	// Timing constants
 	CleanupDelaySeconds = 2
 	HTTPTimeoutSeconds  = 300 // 5 minutes for download
+
+	// Method constants
+	runnerTokenMethod = "runner-token"
+	joinTokenMethod   = "join-token"
 )
 
 // RunnerConfig represents the configuration loaded from the VM
@@ -66,8 +70,25 @@ type RunnerConfig struct {
 
 // GitHubBootstrap handles the GitHub Actions runner bootstrap process
 type GitHubBootstrap struct {
-	config *RunnerConfig
-	logger *log.Logger
+	config     *RunnerConfig
+	logger     Logger
+	httpClient HTTPClient
+	fileSystem FileSystem
+	executor   CommandExecutor
+	system     SystemOperations
+}
+
+// NewGitHubBootstrap creates a new GitHubBootstrap with the given dependencies
+func NewGitHubBootstrap(config *RunnerConfig, logger Logger, httpClient HTTPClient,
+	fileSystem FileSystem, executor CommandExecutor, system SystemOperations) *GitHubBootstrap {
+	return &GitHubBootstrap{
+		config:     config,
+		logger:     logger,
+		httpClient: httpClient,
+		fileSystem: fileSystem,
+		executor:   executor,
+		system:     system,
+	}
 }
 
 func main() {
@@ -82,11 +103,15 @@ func main() {
 
 	// Initialize bootstrap service based on method
 	switch config.Method {
-	case "runner-token":
-		bootstrap := &GitHubBootstrap{
-			config: config,
-			logger: log.New(os.Stdout, "[github-bootstrap] ", log.LstdFlags),
-		}
+	case runnerTokenMethod:
+		bootstrap := NewGitHubBootstrap(
+			config,
+			NewRealLogger("[github-bootstrap] "),
+			NewRealHTTPClient(HTTPTimeoutSeconds*time.Second),
+			NewRealFileSystem(),
+			NewRealCommandExecutor(),
+			NewRealSystemOperations(),
+		)
 
 		// Handle SPIFFE attestation if enabled (independent of runner token)
 		if config.SPIFFE.Enabled {
@@ -99,7 +124,7 @@ func main() {
 			log.Fatalf("GitHub bootstrap failed: %v", err)
 		}
 
-	case "join-token":
+	case joinTokenMethod:
 		// Pure SPIFFE/SPIRE bootstrap implementation (placeholder)
 		log.Fatalf("Pure SPIFFE/SPIRE bootstrap not yet implemented")
 
@@ -158,13 +183,8 @@ func (gb *GitHubBootstrap) downloadGitHubRunner(ctx context.Context) error {
 	gb.logger.Printf("Downloading GitHub Actions runner from %s to %s", downloadURL, installPath)
 
 	// Create runner directory
-	if err := os.MkdirAll(installPath, DirPermissions); err != nil {
+	if err := gb.fileSystem.MkdirAll(installPath, DirPermissions); err != nil {
 		return fmt.Errorf("failed to create install directory: %w", err)
-	}
-
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: HTTPTimeoutSeconds * time.Second,
 	}
 
 	// Download the file
@@ -173,7 +193,7 @@ func (gb *GitHubBootstrap) downloadGitHubRunner(ctx context.Context) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := gb.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to download runner: %w", err)
 	}
@@ -222,18 +242,18 @@ func (gb *GitHubBootstrap) downloadGitHubRunner(ctx context.Context) error {
 		switch header.Typeflag {
 		case tar.TypeDir:
 			// #nosec G115 - header.Mode is from tar header, safe conversion
-			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+			if err := gb.fileSystem.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
 			}
 		case tar.TypeReg:
 			// Create parent directory if it doesn't exist
-			if err := os.MkdirAll(filepath.Dir(targetPath), DirPermissions); err != nil {
+			if err := gb.fileSystem.MkdirAll(filepath.Dir(targetPath), DirPermissions); err != nil {
 				return fmt.Errorf("failed to create parent directory for %s: %w", targetPath, err)
 			}
 
 			// #nosec G304 - targetPath is validated above for path traversal
 			// #nosec G115 - header.Mode is from tar header, safe conversion
-			file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			file, err := gb.fileSystem.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
 				return fmt.Errorf("failed to create file %s: %w", targetPath, err)
 			}
@@ -287,10 +307,10 @@ func (gb *GitHubBootstrap) configureRunner(ctx context.Context) error {
 	}
 
 	// #nosec G204 - configScriptPath is constructed from validated config, not user input
-	cmd := exec.CommandContext(ctx, configScriptPath, args...)
-	cmd.Dir = installPath
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd := gb.executor.CommandContext(ctx, configScriptPath, args...)
+	cmd.SetDir(installPath)
+	cmd.SetStdout(os.Stdout)
+	cmd.SetStderr(os.Stderr)
 
 	return cmd.Run()
 }
@@ -312,17 +332,17 @@ func (gb *GitHubBootstrap) runAndMonitor(ctx context.Context) error {
 	runScriptPath := filepath.Join(installPath, runScript)
 
 	// #nosec G204 - runScriptPath is constructed from validated config, not user input
-	cmd := exec.CommandContext(ctx, runScriptPath)
-	cmd.Dir = installPath
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd := gb.executor.CommandContext(ctx, runScriptPath)
+	cmd.SetDir(installPath)
+	cmd.SetStdout(os.Stdout)
+	cmd.SetStderr(os.Stderr)
 
 	// Runner will exit after job completion (ephemeral mode)
 	return cmd.Run()
 }
 
 // cleanup performs cleanup operations and shuts down the VM
-func (gb *GitHubBootstrap) cleanup(ctx context.Context) error {
+func (gb *GitHubBootstrap) cleanup(_ context.Context) error {
 	gb.logger.Printf("Runner completed, initiating VM shutdown")
 
 	// Clean up runner installation and work directory
@@ -336,22 +356,178 @@ func (gb *GitHubBootstrap) cleanup(ctx context.Context) error {
 		workDir = DefaultWorkDir
 	}
 
-	// Remove directories
-	if err := os.RemoveAll(installPath); err != nil {
+	// Remove directories (non-fatal if they fail)
+	if err := gb.fileSystem.RemoveAll(installPath); err != nil {
 		gb.logger.Printf("Warning: failed to remove install path %s: %v", installPath, err)
 	}
 
-	if err := os.RemoveAll(workDir); err != nil {
+	if err := gb.fileSystem.RemoveAll(workDir); err != nil {
 		gb.logger.Printf("Warning: failed to remove work dir %s: %v", workDir, err)
 	}
 
 	// Give a moment for cleanup to complete
-	time.Sleep(CleanupDelaySeconds * time.Second)
+	gb.system.Sleep(CleanupDelaySeconds)
 
-	// Shutdown the VM
+	// Shutdown the VM using multiple methods
 	gb.logger.Printf("Shutting down VM")
-	cmd := exec.CommandContext(ctx, "shutdown", "-h", "now")
-	return cmd.Run()
+
+	if err := gb.shutdownVM(); err != nil {
+		gb.logger.Printf("VM shutdown failed: %v", err)
+		gb.logger.Printf("VM cleanup completed, but shutdown failed - operator will handle VM cleanup")
+		// Return nil so the bootstrap service exits cleanly
+		// The operator's VM monitoring will detect the stopped process and clean up the VM
+		return nil
+	}
+
+	gb.logger.Printf("VM shutdown initiated successfully")
+	return nil
+}
+
+// shutdownVM attempts to shutdown the VM using various methods
+func (gb *GitHubBootstrap) shutdownVM() error {
+	// Method 1: Try syscall approach (most reliable)
+	if err := gb.shutdownViaSyscall(); err == nil {
+		gb.logger.Printf("VM shutdown via syscall succeeded")
+		return nil
+	}
+
+	// Method 2: Try SysRq trigger (requires /proc/sys/kernel/sysrq to be enabled)
+	if err := gb.shutdownViaSysRq(); err == nil {
+		gb.logger.Printf("VM shutdown via SysRq succeeded")
+		return nil
+	}
+
+	// Method 3: Try power management interface
+	if err := gb.shutdownViaPowerState(); err == nil {
+		gb.logger.Printf("VM shutdown via power state succeeded")
+		return nil
+	}
+
+	// Method 4: Fall back to command-based shutdown
+	return gb.shutdownViaCommand()
+}
+
+// shutdownViaSyscall uses the reboot syscall to shutdown the system
+func (gb *GitHubBootstrap) shutdownViaSyscall() error {
+	gb.logger.Printf("Attempting shutdown via syscall")
+
+	// Sync filesystems first
+	gb.system.Sync()
+
+	// Use the reboot syscall with LINUX_REBOOT_CMD_POWER_OFF
+	// This requires root privileges
+	err := gb.system.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF)
+	if err != nil {
+		return fmt.Errorf("syscall reboot failed: %w", err)
+	}
+
+	return nil
+}
+
+// shutdownViaSysRq uses the SysRq mechanism to shutdown
+func (gb *GitHubBootstrap) shutdownViaSysRq() error {
+	gb.logger.Printf("Attempting shutdown via SysRq")
+
+	// Write 'o' to /proc/sysrq-trigger to power off
+	// This requires /proc/sys/kernel/sysrq to be enabled (usually is)
+	sysrqFile := "/proc/sysrq-trigger"
+
+	// #nosec G306 - This is a system file write for shutdown
+	file, err := gb.fileSystem.OpenFile(sysrqFile, os.O_WRONLY, 0)
+	if err != nil {
+		return fmt.Errorf("failed to open sysrq-trigger: %w", err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			gb.logger.Printf("Warning: failed to close sysrq-trigger: %v", closeErr)
+		}
+	}()
+
+	// 'o' command powers off the system
+	if _, err := gb.fileSystem.WriteString(file, "o"); err != nil {
+		return fmt.Errorf("failed to write to sysrq-trigger: %w", err)
+	}
+
+	return nil
+}
+
+// shutdownViaPowerState uses the power management interface
+func (gb *GitHubBootstrap) shutdownViaPowerState() error {
+	gb.logger.Printf("Attempting shutdown via power state")
+
+	// Write to /sys/power/state to initiate shutdown
+	powerStateFile := "/sys/power/state"
+
+	// #nosec G306 - This is a system file write for shutdown
+	file, err := gb.fileSystem.OpenFile(powerStateFile, os.O_WRONLY, 0)
+	if err != nil {
+		return fmt.Errorf("failed to open power state file: %w", err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			gb.logger.Printf("Warning: failed to close power state file: %v", closeErr)
+		}
+	}()
+
+	// Write "mem" to suspend to RAM, but we want to power off
+	// Actually, let's try writing to /sys/power/disk first
+	if err := file.Close(); err != nil {
+		gb.logger.Printf("Warning: failed to close power state file: %v", err)
+	}
+
+	// Try the poweroff approach via /sys/power/disk
+	diskFile := "/sys/power/disk"
+	// #nosec G306 - This is a system file write for shutdown
+	disk, err := gb.fileSystem.OpenFile(diskFile, os.O_WRONLY, 0)
+	if err != nil {
+		return fmt.Errorf("failed to open power disk file: %w", err)
+	}
+	defer func() {
+		if closeErr := disk.Close(); closeErr != nil {
+			gb.logger.Printf("Warning: failed to close power disk file: %v", closeErr)
+		}
+	}()
+
+	if _, err := gb.fileSystem.WriteString(disk, "shutdown"); err != nil {
+		return fmt.Errorf("failed to write to power disk file: %w", err)
+	}
+
+	return nil
+}
+
+// shutdownViaCommand falls back to command-based shutdown
+func (gb *GitHubBootstrap) shutdownViaCommand() error {
+	gb.logger.Printf("Attempting shutdown via commands")
+
+	// Try different shutdown commands in order of preference
+	shutdownCommands := [][]string{
+		{"sudo", "shutdown", "-h", "now"}, // Most common on Linux
+		{"shutdown", "-h", "now"},         // If running as root
+		{"sudo", "poweroff"},              // Alternative method
+		{"poweroff"},                      // If running as root
+		{"sudo", "halt", "-p"},            // Another alternative
+		{"halt", "-p"},                    // If running as root
+		{"sudo", "systemctl", "poweroff"}, // systemd systems
+		{"systemctl", "poweroff"},         // systemd as root
+	}
+
+	var lastErr error
+	for _, cmdArgs := range shutdownCommands {
+		gb.logger.Printf("Attempting shutdown with: %v", cmdArgs)
+
+		// #nosec G204 - cmd is from predefined list, not user input
+		cmd := gb.executor.CommandContext(context.Background(), cmdArgs[0], cmdArgs[1:]...)
+		if err := cmd.Run(); err != nil {
+			gb.logger.Printf("Shutdown attempt failed with %v: %v", cmdArgs, err)
+			lastErr = err
+			continue
+		}
+
+		gb.logger.Printf("Shutdown command succeeded: %v", cmdArgs)
+		return nil
+	}
+
+	return fmt.Errorf("all shutdown methods failed, last error: %w", lastErr)
 }
 
 // performSPIFFEAttestation handles SPIFFE attestation independently
@@ -429,11 +605,11 @@ func (gb *GitHubBootstrap) buildDownloadURL() string {
 	}
 
 	// Construct URL based on GitHub Actions runner naming convention
-	version := "v2.311.0" // TODO: Make this configurable
+	version := "v2.311.0"      // TODO: Make this configurable
 	versionNumber := "2.311.0" // Version without 'v' prefix for filename
 	filename := fmt.Sprintf("actions-runner-%s-%s-%s.tar.gz", runnerOS, runnerArch, versionNumber)
 	url := fmt.Sprintf("https://github.com/actions/runner/releases/download/%s/%s", version, filename)
-	
+
 	gb.logger.Printf("Constructed download URL: %s", url)
 	return url
 }
