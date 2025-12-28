@@ -28,13 +28,12 @@ builds:
 
   # Bootstrap service binary
   - id: bootstrap-service
-    main: ./cmd/bootstrap-service/main.go
+    main: ./cmd/bootstrap-service
     binary: bootstrap-service
     env:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
       - arm64
