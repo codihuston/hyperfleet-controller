@@ -1,9 +1,51 @@
 apiVersion: hypervisor.hyperfleet.io/v1alpha1
 kind: HypervisorMachineTemplate
 metadata:
-  labels:
-    app.kubernetes.io/name: hyperfleet-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: hypervisormachinetemplate-sample
+  name: github-runner-template
+  namespace: default
 spec:
-  # TODO(user): Add fields here
+  hypervisorClusterRef:
+    name: proxmox-prod
+  template:
+    proxmox:
+      templateId: 9000
+      clone: true
+      linkedClone: true
+  resources:
+    cpu: 4
+    memory: 8Gi
+    disk: 50G
+  attestation:
+    method: join-token
+    config:
+      joinTokenTTL: 1h
+  bootstrap:
+    method: runner-token
+    config:
+      github:
+        url: "https://github.com/myorg/myrepo"
+        pat:
+          name: github-credentials
+          key: pat-token
+        runner:
+          downloadUrl: "https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz"
+          installPath: "/opt/actions-runner"
+          workDir: "/tmp/runner-work"
+          labels:
+            - "self-hosted"
+            - "hyperfleet"
+            - "ephemeral"
+  network:
+    mode: dhcp
+    dhcp:
+      sendHostname: true
+      requestStaticLease: true
+      clientIdentifier: "hostname"
+  cloudInit:
+    userData: |
+      #cloud-config
+      packages:
+        - curl
+        - git
+      runcmd:
+        - echo "HyperFleet runner template ready"

@@ -51,7 +51,41 @@ var _ = Describe("HypervisorMachineTemplate Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: hypervisorv1alpha1.HypervisorMachineTemplateSpec{
+						HypervisorClusterRef: hypervisorv1alpha1.ObjectReference{
+							Name: "test-cluster",
+						},
+						Template: hypervisorv1alpha1.TemplateSpec{
+							Proxmox: &hypervisorv1alpha1.ProxmoxTemplateSpec{
+								TemplateID:  9000,
+								Clone:       true,
+								LinkedClone: true,
+							},
+						},
+						Resources: hypervisorv1alpha1.ResourceRequirements{
+							CPU:    2,
+							Memory: "4Gi",
+							Disk:   "20G",
+						},
+						Attestation: hypervisorv1alpha1.AttestationSpec{
+							Method: "join-token",
+							Config: hypervisorv1alpha1.AttestationConfig{
+								JoinTokenTTL: "1h",
+							},
+						},
+						Bootstrap: hypervisorv1alpha1.BootstrapSpec{
+							Method: "runner-token",
+							Config: hypervisorv1alpha1.BootstrapConfig{
+								GitHub: &hypervisorv1alpha1.GitHubConfig{
+									URL: "https://github.com/test/repo",
+									PAT: &hypervisorv1alpha1.SecretKeySelector{
+										Name: "github-pat",
+										Key:  "token",
+									},
+								},
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

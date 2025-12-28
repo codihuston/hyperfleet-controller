@@ -429,11 +429,11 @@ func (gb *GitHubBootstrap) buildDownloadURL() string {
 	}
 
 	// Construct URL based on GitHub Actions runner naming convention
-	version := "v2.311.0" // TODO: Make this configurable
+	version := "v2.311.0"      // TODO: Make this configurable
 	versionNumber := "2.311.0" // Version without 'v' prefix for filename
 	filename := fmt.Sprintf("actions-runner-%s-%s-%s.tar.gz", runnerOS, runnerArch, versionNumber)
 	url := fmt.Sprintf("https://github.com/actions/runner/releases/download/%s/%s", version, filename)
-	
+
 	gb.logger.Printf("Constructed download URL: %s", url)
 	return url
 }

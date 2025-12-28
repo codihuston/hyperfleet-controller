@@ -202,21 +202,17 @@ spec:
     memory: 8Gi
     disk: 50Gi
   attestation:
-    # SPIFFE attestation (independent of workload type)
-    spiffe:
-      enabled: true  # Enable SPIFFE attestation
-      method: join-token  # Options: join-token, tpm
-      config:
-        joinTokenTTL: 1h
-        # For TPM method:
-        # tpmDevice: /dev/tpm0
-    
-    # Workload-specific attestation (for GitHub runner tokens)
-    workload:
-      method: runner-token  # Options: runner-token, external-secrets
-      config:
-        # GitHub configuration (for runner-token method)
-        github:
+    method: join-token  # Options: join-token, tpm
+    config:
+      joinTokenTTL: 1h
+      # For TPM method:
+      # tpmDevice: /dev/tpm0
+  
+  bootstrap:
+    method: runner-token  # Options: runner-token, external-secrets
+    config:
+      # GitHub configuration (for runner-token method)
+      github:
           # Option 1: GitHub App credentials (recommended for production)
           app:
             appId:
@@ -298,7 +294,7 @@ spec:
                 "spiffe_id": "{{ .SPIFFEID }}"
               },
               {{ end }}
-              {{ if eq .WorkloadMethod "runner-token" }}
+              {{ if eq .BootstrapMethod "runner-token" }}
               "runner_token": "{{ .RunnerToken }}",
               "registration_url": "{{ .RegistrationURL }}",
               "runner_name": "{{ .RunnerName }}",
@@ -994,6 +990,17 @@ func (r *MachineClaimReconciler) generateAttestationData(ctx context.Context,
             SPIFFEID:  spiffeID,
         }, nil
         
+    default:
+        return nil, fmt.Errorf("unsupported attestation method: %s", template.Spec.Attestation.Method)
+    }
+}
+
+// Generate bootstrap data based on template configuration
+func (r *MachineClaimReconciler) generateBootstrapData(ctx context.Context, 
+    claim *hyperfleetv1alpha1.MachineClaim, 
+    template *hyperfleetv1alpha1.HypervisorMachineTemplate) (*BootstrapData, error) {
+    
+    switch template.Spec.Bootstrap.Method {
     case "runner-token":
         // Generate GitHub registration token dynamically
         return r.generateGitHubRegistrationToken(ctx, claim, template)
@@ -1007,9 +1014,9 @@ func (r *MachineClaimReconciler) generateAttestationData(ctx context.Context,
 // SECURITY: PAT never leaves Kubernetes - only short-lived registration tokens are exposed to VMs
 func (r *MachineClaimReconciler) generateGitHubRegistrationToken(ctx context.Context,
     claim *hyperfleetv1alpha1.MachineClaim,
-    template *hyperfleetv1alpha1.HypervisorMachineTemplate) (*AttestationData, error) {
+    template *hyperfleetv1alpha1.HypervisorMachineTemplate) (*BootstrapData, error) {
     
-    config := template.Spec.Attestation.Config.GitHub
+    config := template.Spec.Bootstrap.Config.GitHub
     
     // Get GitHub PAT from secret (PAT stays within Kubernetes cluster)
     pat, err := r.getSecretValue(ctx, config.Credentials)
@@ -1096,7 +1103,7 @@ func (r *MachineClaimReconciler) generateGitHubRegistrationToken(ctx context.Con
         }
     }
     
-    return &AttestationData{
+    return &BootstrapData{
         Method:          "runner-token",
         Platform:        "github-actions",
         RunnerToken:     tokenResp.Token,
@@ -1329,7 +1336,7 @@ func (r *MachineClaimReconciler) generateRegistrationToken(ctx context.Context, 
 Use GitHub Apps for better security, auditability, and operational resilience:
 
 ```yaml
-attestation:
+bootstrap:
   method: runner-token
   config:
     github:
