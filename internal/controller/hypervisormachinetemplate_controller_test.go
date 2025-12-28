@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -28,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	hypervisorv1alpha1 "github.com/codihuston/hyperfleet-operator/api/v1alpha1"
+	"github.com/codihuston/hyperfleet-operator/internal/provider"
 )
 
 var _ = Describe("HypervisorMachineTemplate Controller", func() {
@@ -103,16 +105,181 @@ var _ = Describe("HypervisorMachineTemplate Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &HypervisorMachineTemplateReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:          k8sClient,
+				Scheme:          k8sClient.Scheme(),
+				ProviderFactory: provider.NewMockClientFactory(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+		})
+
+		It("should handle deletion with finalizers", func() {
+			By("Creating a template with finalizer")
+			template := &hypervisorv1alpha1.HypervisorMachineTemplate{}
+			err := k8sClient.Get(ctx, typeNamespacedName, template)
+			Expect(err).NotTo(HaveOccurred())
+
+			controllerReconciler := &HypervisorMachineTemplateReconciler{
+				Client:          k8sClient,
+				Scheme:          k8sClient.Scheme(),
+				ProviderFactory: provider.NewMockClientFactory(),
+			}
+
+			By("Adding finalizer through reconciliation")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying finalizer was added")
+			err = k8sClient.Get(ctx, typeNamespacedName, template)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(template.Finalizers).To(ContainElement("hypervisormachinetemplate.hyperfleet.io/finalizer"))
+
+			By("Deleting the template")
+			err = k8sClient.Delete(ctx, template)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Reconciling deletion")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying template is deleted")
+			err = k8sClient.Get(ctx, typeNamespacedName, template)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("should validate template against cluster", func() {
+			By("Creating a HypervisorCluster")
+			cluster := &hypervisorv1alpha1.HypervisorCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cluster",
+					Namespace: "default",
+				},
+				Spec: hypervisorv1alpha1.HypervisorClusterSpec{
+					Provider: "proxmox",
+					Endpoint: "https://test.example.com:8006",
+					Credentials: hypervisorv1alpha1.HypervisorCredentials{
+						TokenID: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "test-secret"},
+							Key:                  "token-id",
+						},
+						TokenSecret: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "test-secret"},
+							Key:                  "token-secret",
+						},
+					},
+					Nodes:          []string{"node1"},
+					DefaultStorage: "local-lvm",
+					DefaultNetwork: "vmbr0",
+				},
+				Status: hypervisorv1alpha1.HypervisorClusterStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Ready",
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())
+
+			By("Reconciling the template")
+			controllerReconciler := &HypervisorMachineTemplateReconciler{
+				Client:          k8sClient,
+				Scheme:          k8sClient.Scheme(),
+				ProviderFactory: provider.NewMockClientFactory(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying template status is updated")
+			template := &hypervisorv1alpha1.HypervisorMachineTemplate{}
+			err = k8sClient.Get(ctx, typeNamespacedName, template)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(template.Status.Conditions).NotTo(BeEmpty())
+		})
+
+		It("should handle missing cluster reference", func() {
+			By("Creating template with non-existent cluster reference")
+			template := &hypervisorv1alpha1.HypervisorMachineTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-missing-cluster",
+					Namespace: "default",
+				},
+				Spec: hypervisorv1alpha1.HypervisorMachineTemplateSpec{
+					HypervisorClusterRef: hypervisorv1alpha1.ObjectReference{
+						Name: "non-existent-cluster",
+					},
+					Template: hypervisorv1alpha1.TemplateSpec{
+						Proxmox: &hypervisorv1alpha1.ProxmoxTemplateSpec{
+							TemplateID:  9000,
+							Clone:       true,
+							LinkedClone: true,
+						},
+					},
+					Resources: hypervisorv1alpha1.ResourceRequirements{
+						CPU:    2,
+						Memory: "4Gi",
+						Disk:   "20G",
+					},
+					Attestation: hypervisorv1alpha1.AttestationSpec{
+						Method: "join-token",
+					},
+					Bootstrap: hypervisorv1alpha1.BootstrapSpec{
+						Method: "runner-token",
+						Config: hypervisorv1alpha1.BootstrapConfig{
+							GitHub: &hypervisorv1alpha1.GitHubConfig{
+								URL: "https://github.com/test/repo",
+								PAT: &hypervisorv1alpha1.SecretKeySelector{
+									Name: "github-pat",
+									Key:  "token",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+
+			By("Reconciling the template")
+			controllerReconciler := &HypervisorMachineTemplateReconciler{
+				Client:          k8sClient,
+				Scheme:          k8sClient.Scheme(),
+				ProviderFactory: provider.NewMockClientFactory(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-missing-cluster",
+					Namespace: "default",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying template has ClusterNotFound condition")
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "test-missing-cluster",
+				Namespace: "default",
+			}, template)
+			Expect(err).NotTo(HaveOccurred())
+
+			found := false
+			for _, condition := range template.Status.Conditions {
+				if condition.Type == "TemplateValid" && condition.Reason == "ClusterNotFound" {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue())
 		})
 	})
 })
