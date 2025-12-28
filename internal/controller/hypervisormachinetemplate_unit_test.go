@@ -282,7 +282,7 @@ func TestHypervisorMachineTemplateReconciler_handleDeletion(t *testing.T) {
 		t.Errorf("Expected no error but got: %v", err)
 	}
 
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		t.Errorf("Expected no requeue")
 	}
 
