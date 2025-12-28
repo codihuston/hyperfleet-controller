@@ -40,7 +40,7 @@ func TestDefaultClientFactory_CreateClient(t *testing.T) {
 		},
 		{
 			name:        "unsupported provider",
-			provider:    "vmware",
+			provider:    "unsupported",
 			expectError: true,
 			expectType:  "",
 		},
