@@ -256,3 +256,86 @@ func TestHypervisorMachineTemplateReconciler_updateStatus(t *testing.T) {
 		t.Errorf("Expected LastValidated to be set")
 	}
 }
+
+func TestHypervisorMachineTemplateReconciler_handleDeletion(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = hypervisorv1alpha1.AddToScheme(scheme)
+
+	template := &hypervisorv1alpha1.HypervisorMachineTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-template",
+			Namespace:  "default",
+			Finalizers: []string{FinalizerName},
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(template).Build()
+	r := &HypervisorMachineTemplateReconciler{
+		Client: client,
+		Scheme: scheme,
+	}
+
+	ctx := context.Background()
+	result, err := r.handleDeletion(ctx, template)
+
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+
+	if result.Requeue {
+		t.Errorf("Expected no requeue")
+	}
+
+	// Verify finalizer was removed
+	if len(template.Finalizers) != 0 {
+		t.Errorf("Expected finalizer to be removed, but got %v", template.Finalizers)
+	}
+}
+
+func TestHypervisorMachineTemplateReconciler_validateTemplate(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = hypervisorv1alpha1.AddToScheme(scheme)
+
+	template := &hypervisorv1alpha1.HypervisorMachineTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-template",
+			Namespace: "default",
+		},
+		Spec: hypervisorv1alpha1.HypervisorMachineTemplateSpec{
+			HypervisorClusterRef: hypervisorv1alpha1.ObjectReference{
+				Name: "test-cluster",
+			},
+		},
+	}
+
+	// Test with missing cluster
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(template).Build()
+	r := &HypervisorMachineTemplateReconciler{
+		Client:          client,
+		Scheme:          scheme,
+		ProviderFactory: provider.NewMockClientFactory(),
+	}
+
+	ctx := context.Background()
+	result, err := r.validateTemplate(ctx, template)
+
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+
+	if result.RequeueAfter != TemplateRequeueInterval {
+		t.Errorf("Expected requeue after %v, got %v", TemplateRequeueInterval, result.RequeueAfter)
+	}
+
+	// Verify condition was set
+	found := false
+	for _, condition := range template.Status.Conditions {
+		if condition.Type == ConditionTemplateValid && condition.Reason == "ClusterNotFound" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected ClusterNotFound condition to be set")
+	}
+}
