@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	hypervisorv1alpha1 "github.com/codihuston/hyperfleet-operator/api/v1alpha1"
+	"github.com/codihuston/hyperfleet-operator/internal/provider"
 )
 
 var _ = Describe("HypervisorMachineTemplate Controller", func() {
@@ -51,7 +52,41 @@ var _ = Describe("HypervisorMachineTemplate Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: hypervisorv1alpha1.HypervisorMachineTemplateSpec{
+						HypervisorClusterRef: hypervisorv1alpha1.ObjectReference{
+							Name: "test-cluster",
+						},
+						Template: hypervisorv1alpha1.TemplateSpec{
+							Proxmox: &hypervisorv1alpha1.ProxmoxTemplateSpec{
+								TemplateID:  9000,
+								Clone:       true,
+								LinkedClone: true,
+							},
+						},
+						Resources: hypervisorv1alpha1.ResourceRequirements{
+							CPU:    2,
+							Memory: "4Gi",
+							Disk:   "20G",
+						},
+						Attestation: hypervisorv1alpha1.AttestationSpec{
+							Method: "join-token",
+							Config: hypervisorv1alpha1.AttestationConfig{
+								JoinTokenTTL: "1h",
+							},
+						},
+						Bootstrap: hypervisorv1alpha1.BootstrapSpec{
+							Method: "runner-token",
+							Config: hypervisorv1alpha1.BootstrapConfig{
+								GitHub: &hypervisorv1alpha1.GitHubConfig{
+									URL: "https://github.com/test/repo",
+									PAT: &hypervisorv1alpha1.SecretKeySelector{
+										Name: "github-pat",
+										Key:  "token",
+									},
+								},
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -66,19 +101,19 @@ var _ = Describe("HypervisorMachineTemplate Controller", func() {
 			By("Cleanup the specific resource instance HypervisorMachineTemplate")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &HypervisorMachineTemplateReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:          k8sClient,
+				Scheme:          k8sClient.Scheme(),
+				ProviderFactory: provider.NewMockClientFactory(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
 })

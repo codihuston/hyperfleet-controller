@@ -43,6 +43,9 @@ const (
 	// DefaultInsecureSkipVerify defines the default TLS verification behavior
 	// Set to false by default for security - users must explicitly configure insecure connections
 	DefaultInsecureSkipVerify = false
+
+	// ConditionReady represents the ready condition type
+	ConditionReady = "Ready"
 )
 
 // HypervisorClusterReconciler reconciles a HypervisorCluster object
@@ -235,7 +238,7 @@ func (r *HypervisorClusterReconciler) updateStatus(ctx context.Context, cluster 
 
 	// Prepare condition
 	condition := metav1.Condition{
-		Type:               "Ready",
+		Type:               ConditionReady,
 		LastTransitionTime: result.TestedAt,
 		ObservedGeneration: cluster.Generation,
 		Message:            result.Message,
@@ -252,7 +255,7 @@ func (r *HypervisorClusterReconciler) updateStatus(ctx context.Context, cluster 
 	// Update or add the condition
 	updated := false
 	for i, existingCondition := range cluster.Status.Conditions {
-		if existingCondition.Type == "Ready" {
+		if existingCondition.Type == ConditionReady {
 			cluster.Status.Conditions[i] = condition
 			updated = true
 			break
